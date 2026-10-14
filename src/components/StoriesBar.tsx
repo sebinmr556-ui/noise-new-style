@@ -16,8 +16,10 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
   onAddStory,
 }) => {
   // നിലവിലെ യൂസർക്ക് സ്റ്റോറി ഉണ്ടോ എന്ന് പരിശോധിക്കുന്നു 
-  // (നിങ്ങളുടെ types അനുസരിച്ച് userId, uid എന്നിവ മാറ്റേണ്ടി വന്നേക്കാം)
-  const userStoryIndex = stories.findIndex(story => story.userId === currentUser?.uid);
+  // (userId, authorId, uid ഇവയിൽ ഏതാണെങ്കിലും സപ്പോർട്ട് ചെയ്യാൻ അപ്ഡേറ്റ് ചെയ്തത്)
+  const userStoryIndex = stories.findIndex(story => 
+    currentUser && (story.userId === currentUser.uid || story.authorId === currentUser.uid || story.uid === currentUser.uid)
+  );
   const hasStory = userStoryIndex !== -1;
   const userStory = hasStory ? stories[userStoryIndex] : null;
 
@@ -72,9 +74,17 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
 
         {/* Stories List */}
         {stories.map((story, index) => {
-          // യൂസറുടെ സ്വന്തം സ്റ്റോറി വീണ്ടും വരാതിരിക്കാൻ ഇവിടെ ഒഴിവാക്കുന്നു
-          if (currentUser && story.userId === currentUser.uid) {
-            return null;
+          
+          // സ്വന്തം സ്റ്റോറി വീണ്ടും വരാതിരിക്കാൻ കൃത്യമായി ചെക്ക് ചെയ്യുന്നു
+          // (userId, authorId, uid ഇതിൽ ഏതാണെങ്കിലും അത് വർക്ക് ആവും)
+          const isOwner = currentUser && (
+            story.userId === currentUser.uid || 
+            story.authorId === currentUser.uid || 
+            story.uid === currentUser.uid
+          );
+
+          if (isOwner) {
+            return null; // സ്വന്തം സ്റ്റോറി ഈ ലിസ്റ്റിൽ നിന്നും ഒഴിവാക്കുന്നു
           }
 
           const isSeen = story.hasSeen;
