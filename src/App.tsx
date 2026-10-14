@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { updateProfile } from 'firebase/auth';
 import { 
   auth, 
   db, 
@@ -39,15 +40,20 @@ import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { Loader2 } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    return (localStorage.getItem('noise_active_tab') as NavTab) || 'home';
+  });
+
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
     try {
       const saved = localStorage.getItem('noise_current_user');
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed) {
-          // Clean up any legacy dummy photos
-          if (
+          const savedCustomDp = localStorage.getItem('noise_custom_dp');
+          if (savedCustomDp && savedCustomDp.startsWith('data:image')) {
+            parsed.photoURL = savedCustomDp;
+          } else if (
             typeof parsed.photoURL === 'string' &&
             (parsed.photoURL.includes('unsplash.com') || parsed.photoURL.includes('ui-avatars.com'))
           ) {
@@ -62,13 +68,11 @@ export default function App() {
     }
   });
 
-  // Pure Firebase state - all demo samples removed
   const [posts, setPosts] = useState<Post[]>(() => {
     try {
       const local = localStorage.getItem('noise_cached_posts');
       if (local) {
         const parsed = JSON.parse(local);
-        // Exclude any legacy mock posts
         if (Array.isArray(parsed)) {
           return parsed.filter((p: any) => p && !p.id?.startsWith('post-1') && !p.id?.startsWith('post-2') && !p.id?.startsWith('post-3') && p.uid !== 'system-user-1');
         }
@@ -83,18 +87,20 @@ export default function App() {
   const [selectedDetailPost, setSelectedDetailPost] = useState<Post | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
+  
+  const [isDirectModalOpen, setIsDirectModalOpen] = useState(() => {
+    return sessionStorage.getItem('noise_dm_open') === 'true';
+  });
+
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
 
-  // Voice Chatrooms State
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(INITIAL_VOICE_ROOMS);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
   const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(false);
   const [isVoiceRoomsListOpen, setIsVoiceRoomsListOpen] = useState(false);
 
-  // Sync current user to localStorage
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('noise_current_user', JSON.stringify(currentUser));
@@ -103,48 +109,55 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Sync posts to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('noise_cached_posts', JSON.stringify(posts));
     } catch {}
   }, [posts]);
 
-  // Listen to Firebase Auth state
+  // ഇതാണ് റിഫ്രഷ് ചെയ്യുമ്പോൾ ഡിപി പോകുന്നത് തടയുന്ന പ്രധാന ഭാഗം
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) return;
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
-        setCurrentUser((prev) => ({
-          uid: user.uid,
-          displayName: user.displayName || prev?.displayName || 'User',
-          username: (user.displayName || prev?.username || 'user')
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, '_')
-            .slice(0, 15),
-          photoURL:
-            user.photoURL ||
-            (prev?.photoURL && !prev.photoURL.includes('unsplash.com') && !prev.photoURL.includes('ui-avatars.com')
-              ? prev.photoURL
-              : ''),
-          followersCount: prev?.followersCount || 0,
-          followingCount: prev?.followingCount || 0,
-        }));
+        setCurrentUser((prev) => {
+          let finalPhoto = user.photoURL || '';
+          const savedCustomDp = localStorage.getItem('noise_custom_dp');
+          
+          // ഫോണിൽ സേവ് ചെയ്ത ഡിപി ഉണ്ടെങ്കിൽ ഫയർബേസ് ഡിപി ഒഴിവാക്കുന്നു
+          if (prev?.photoURL && prev.photoURL.startsWith('data:image')) {
+            finalPhoto = prev.photoURL;
+          } else if (savedCustomDp && savedCustomDp.startsWith('data:image')) {
+            finalPhoto = savedCustomDp;
+          } else if (finalPhoto.includes('unsplash.com') || finalPhoto.includes('ui-avatars.com')) {
+            finalPhoto = '';
+          }
+
+          return {
+            uid: user.uid,
+            displayName: user.displayName || prev?.displayName || 'User',
+            username: prev?.username || (user.displayName || 'user')
+              .toLowerCase()
+              .replace(/[^a-z0-9_]/g, '_')
+              .slice(0, 15),
+            photoURL: finalPhoto,
+            followersCount: prev?.followersCount || 0,
+            followingCount: prev?.followingCount || 0,
+          };
+        });
       }
     });
 
     return () => unsubscribe();
   }, []);
 
-  // Connect Firebase Firestore Real-Time Listeners for Posts & Stories
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setIsLoadingPosts(false);
       return;
     }
 
-    // 1. Posts Real-Time Listener
     const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsubscribePosts = onSnapshot(
       postsQuery,
@@ -177,7 +190,6 @@ export default function App() {
       }
     );
 
-    // 2. Stories Real-Time Listener
     const storiesQuery = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
     const unsubscribeStories = onSnapshot(
       storiesQuery,
@@ -197,12 +209,9 @@ export default function App() {
         });
         setStories(firestoreStories);
       },
-      (error) => {
-        console.warn('Firestore stories listener warning:', error);
-      }
+      (error) => console.warn('Firestore stories warning:', error)
     );
 
-    // 3. Voice Rooms Real-Time Listener
     const roomsQuery = query(collection(db, 'voice_rooms'), orderBy('createdAt', 'desc'));
     const unsubscribeRooms = onSnapshot(
       roomsQuery,
@@ -238,9 +247,7 @@ export default function App() {
           });
         }
       },
-      (error) => {
-        console.debug('Firestore voice rooms notice:', error);
-      }
+      (error) => console.debug('Firestore rooms warning:', error)
     );
 
     return () => {
@@ -250,102 +257,52 @@ export default function App() {
     };
   }, []);
 
-  // Handle Logout
   const handleSignOut = async () => {
     if (isFirebaseConfigured && auth) {
-      try {
-        await fbSignOut(auth);
-      } catch (e) {
-        console.error(e);
-      }
+      try { await fbSignOut(auth); } catch (e) { console.error(e); }
     }
     setCurrentUser(null);
-    setActiveTab('home');
+    handleTabChange('home');
   };
 
-  // Toggle Like on Post
+  const toggleDirectModal = (isOpen: boolean) => {
+    setIsDirectModalOpen(isOpen);
+    sessionStorage.setItem('noise_dm_open', isOpen ? 'true' : 'false');
+  };
+
   const handleLikeToggle = async (postId: string) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const liked = p.likedBy?.includes(currentUser.uid);
-          const newLikedBy = liked
-            ? p.likedBy.filter((id) => id !== currentUser.uid)
-            : [...(p.likedBy || []), currentUser.uid];
-          const newLikes = liked ? Math.max(0, p.likes - 1) : p.likes + 1;
-          const updated = {
-            ...p,
-            likes: newLikes,
-            likedBy: newLikedBy,
-          };
-
-          // Sync to Firestore
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                likes: newLikes,
-                likedBy: newLikedBy,
-              }).catch((e) => console.warn('Like update error:', e));
-            } catch {}
-          }
-
-          return updated;
+    if (!currentUser) return setIsLoginModalOpen(true);
+    setPosts((prev) => prev.map((p) => {
+      if (p.id === postId) {
+        const liked = p.likedBy?.includes(currentUser.uid);
+        const newLikedBy = liked ? p.likedBy.filter((id) => id !== currentUser.uid) : [...(p.likedBy || []), currentUser.uid];
+        const newLikes = liked ? Math.max(0, p.likes - 1) : p.likes + 1;
+        if (isFirebaseConfigured && db) {
+          try { updateDoc(doc(db, 'posts', p.id), { likes: newLikes, likedBy: newLikedBy }).catch(() => {}); } catch {}
         }
-        return p;
-      })
-    );
+        return { ...p, likes: newLikes, likedBy: newLikedBy };
+      }
+      return p;
+    }));
   };
 
-  // Toggle Save on Post
   const handleSaveToggle = (postId: string) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const saved = p.savedBy ? p.savedBy.includes(currentUser.uid) : false;
-          const currentSavedList = p.savedBy || [];
-          const newSavedBy = saved
-            ? currentSavedList.filter((id) => id !== currentUser.uid)
-            : [...currentSavedList, currentUser.uid];
-          const updated = {
-            ...p,
-            savedBy: newSavedBy,
-          };
-
-          // Sync to Firestore
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                savedBy: newSavedBy,
-              }).catch((e) => console.warn('Save update error:', e));
-            } catch {}
-          }
-
-          return updated;
+    if (!currentUser) return setIsLoginModalOpen(true);
+    setPosts((prev) => prev.map((p) => {
+      if (p.id === postId) {
+        const saved = p.savedBy?.includes(currentUser.uid) || false;
+        const newSavedBy = saved ? (p.savedBy || []).filter((id) => id !== currentUser.uid) : [...(p.savedBy || []), currentUser.uid];
+        if (isFirebaseConfigured && db) {
+          try { updateDoc(doc(db, 'posts', p.id), { savedBy: newSavedBy }).catch(() => {}); } catch {}
         }
-        return p;
-      })
-    );
+        return { ...p, savedBy: newSavedBy };
+      }
+      return p;
+    }));
   };
 
-  // Add Comment
   const handleAddComment = async (postId: string, text: string) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
+    if (!currentUser) return setIsLoginModalOpen(true);
     const newComment: CommentItem = {
       id: `comm-${Date.now()}`,
       uid: currentUser.uid,
@@ -354,78 +311,44 @@ export default function App() {
       text: text,
       createdAt: 'Just now',
     };
-
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const updatedComments = [...(p.comments || []), newComment];
-          const updatedPost = { ...p, comments: updatedComments };
-
-          if (activeCommentPost?.id === postId) {
-            setActiveCommentPost(updatedPost);
-          }
-
-          // Sync to Firestore
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                comments: updatedComments,
-              }).catch((e) => console.warn('Comment update error:', e));
-            } catch {}
-          }
-
-          return updatedPost;
+    setPosts((prev) => prev.map((p) => {
+      if (p.id === postId) {
+        const updatedComments = [...(p.comments || []), newComment];
+        const updatedPost = { ...p, comments: updatedComments };
+        if (activeCommentPost?.id === postId) setActiveCommentPost(updatedPost);
+        if (isFirebaseConfigured && db) {
+          try { updateDoc(doc(db, 'posts', p.id), { comments: updatedComments }).catch(() => {}); } catch {}
         }
-        return p;
-      })
-    );
+        return updatedPost;
+      }
+      return p;
+    }));
   };
 
-  // Delete Comment
   const handleDeleteComment = (postId: string, commentId: string) => {
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const updatedComments = (p.comments || []).filter((c) => c.id !== commentId);
-          const updated = { ...p, comments: updatedComments };
-          if (activeCommentPost?.id === postId) {
-            setActiveCommentPost(updated);
-          }
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, { comments: updatedComments }).catch(() => {});
-            } catch {}
-          }
-          return updated;
+    setPosts((prev) => prev.map((p) => {
+      if (p.id === postId) {
+        const updatedComments = (p.comments || []).filter((c) => c.id !== commentId);
+        const updated = { ...p, comments: updatedComments };
+        if (activeCommentPost?.id === postId) setActiveCommentPost(updated);
+        if (isFirebaseConfigured && db) {
+          try { updateDoc(doc(db, 'posts', p.id), { comments: updatedComments }).catch(() => {}); } catch {}
         }
-        return p;
-      })
-    );
+        return updated;
+      }
+      return p;
+    }));
   };
 
-  // Create Post with Baked Filters to Firebase
-  const handleCreatePost = async (postData: {
-    image: string;
-    caption: string;
-    location?: string;
-    filter?: string;
-  }) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
+  const handleCreatePost = async (postData: { image: string; caption: string; location?: string; filter?: string; }) => {
+    if (!currentUser) return setIsLoginModalOpen(true);
     let newPostId = `post-${Date.now()}`;
-
-    // Write to Firestore posts collection
     if (isFirebaseConfigured && db) {
       try {
         const docRef = await addDoc(collection(db, 'posts'), {
           username: currentUser.displayName || currentUser.username,
           avatar: currentUser.photoURL,
-          image: postData.image, // Processed image with filters baked in
+          image: postData.image,
           caption: postData.caption,
           location: postData.location || '',
           filter: postData.filter || 'normal',
@@ -437,11 +360,8 @@ export default function App() {
           comments: [],
         });
         newPostId = docRef.id;
-      } catch (err) {
-        console.warn('Firestore write warning:', err);
-      }
+      } catch (err) { console.warn('Firestore write warning:', err); }
     }
-
     const newPost: Post = {
       id: newPostId,
       uid: currentUser.uid,
@@ -457,67 +377,66 @@ export default function App() {
       comments: [],
       createdAt: Date.now(),
     };
-
     setPosts((prev) => [newPost, ...prev.filter((p) => p.id !== newPostId)]);
-    setActiveTab('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleTabChange('home');
   };
 
-  // Delete Post
   const handleDeletePost = async (postId: string) => {
     if (!confirm('Are you sure you want to delete this post?')) return;
-
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-
     if (isFirebaseConfigured && db) {
+      try { await deleteDoc(doc(db, 'posts', postId)); } catch (e) {}
+    }
+  };
+
+  const handleUpdateProfile = async (updates: { displayName: string; username: string; bio: string; website?: string; }) => {
+    if (!currentUser) return;
+    const updated = { ...currentUser, ...updates };
+    setCurrentUser(updated);
+
+    if (isFirebaseConfigured && auth?.currentUser) {
       try {
-        await deleteDoc(doc(db, 'posts', postId));
+        await updateProfile(auth.currentUser, { displayName: updates.displayName });
       } catch (e) {
-        console.warn(e);
+        console.warn('Firebase profile error:', e);
       }
     }
   };
 
-  // Update Profile
-  const handleUpdateProfile = (updates: {
-    displayName: string;
-    username: string;
-    bio: string;
-    website?: string;
-  }) => {
-    if (!currentUser) return;
-    const updated = {
-      ...currentUser,
-      ...updates,
-    };
-    setCurrentUser(updated);
-  };
-
-  // Update Avatar
-  const handleUpdateAvatar = (dataUrl: string) => {
+  const handleUpdateAvatar = async (dataUrl: string) => {
     if (!currentUser) return;
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: dataUrl } : null));
+    localStorage.setItem('noise_custom_dp', dataUrl); // Force save DP local
+
+    if (isFirebaseConfigured && auth?.currentUser) {
+      try {
+        await updateProfile(auth.currentUser, { photoURL: dataUrl });
+      } catch (e) {
+        console.warn('Firebase avatar error:', e);
+      }
+    }
   };
 
-  // Remove Avatar
-  const handleRemoveAvatar = () => {
+  const handleRemoveAvatar = async () => {
     if (!currentUser) return;
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: '' } : null));
-  };
+    localStorage.removeItem('noise_custom_dp'); // Remove local DP
 
-  // Mark Story as Seen
-  const handleStorySeen = (storyId: string) => {
-    setStories((prev) =>
-      prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s))
-    );
-  };
-
-  // Add Real User Story to Firebase
-  const handleAddUserStory = () => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
+    if (isFirebaseConfigured && auth?.currentUser) {
+      try {
+        await updateProfile(auth.currentUser, { photoURL: '' });
+      } catch (e) {
+        console.warn('Firebase avatar error:', e);
+      }
     }
+  };
+
+  const handleStorySeen = (storyId: string) => {
+    setStories((prev) => prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s)));
+  };
+
+  const handleAddUserStory = () => {
+    if (!currentUser) return setIsLoginModalOpen(true);
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -532,17 +451,13 @@ export default function App() {
           const canvas = document.createElement('canvas');
           const MAX = 800;
           let w = img.width, h = img.height;
-          if (w > h) {
-            if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; }
-          } else {
-            if (h > MAX) { w = Math.round((h * MAX) / h); h = MAX; }
-          }
+          if (w > h) { if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; } } 
+          else { if (h > MAX) { w = Math.round((h * MAX) / h); h = MAX; } }
           canvas.width = w; canvas.height = h;
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, w, h);
             const mediaUrl = canvas.toDataURL('image/jpeg', 0.85);
-
             if (isFirebaseConfigured && db) {
               try {
                 await addDoc(collection(db, 'stories'), {
@@ -553,9 +468,7 @@ export default function App() {
                   caption: 'My moment ✨',
                   createdAt: serverTimestamp(),
                 });
-              } catch (err) {
-                console.warn('Story save error:', err);
-              }
+              } catch (err) {}
             }
           }
         };
@@ -566,96 +479,36 @@ export default function App() {
     input.click();
   };
 
-  // Voice Room Handlers
-  const handleCreateVoiceRoom = async (data: {
-    title: string;
-    topic: string;
-    tags: string[];
-    ambientVibe: 'none' | 'lofi' | 'rain' | 'cafe' | 'synth';
-  }) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
+  const handleCreateVoiceRoom = async (data: { title: string; topic: string; tags: string[]; ambientVibe: 'none' | 'lofi' | 'rain' | 'cafe' | 'synth'; }) => {
+    if (!currentUser) return setIsLoginModalOpen(true);
     const hostParticipant: RoomParticipant = {
-      uid: currentUser.uid,
-      username: currentUser.username,
-      displayName: currentUser.displayName,
-      avatar: currentUser.photoURL,
-      isHost: true,
-      isSpeaker: true,
-      isMuted: false,
-      isSpeaking: false,
-      joinedAt: Date.now(),
+      uid: currentUser.uid, username: currentUser.username, displayName: currentUser.displayName,
+      avatar: currentUser.photoURL, isHost: true, isSpeaker: true, isMuted: false, isSpeaking: false, joinedAt: Date.now(),
     };
-
     const newRoom: VoiceRoom = {
-      id: `room-${Date.now()}`,
-      title: data.title,
-      topic: data.topic,
-      hostUid: currentUser.uid,
-      hostUsername: currentUser.username,
-      hostDisplayName: currentUser.displayName,
-      hostAvatar: currentUser.photoURL,
-      speakers: [hostParticipant],
-      listeners: [],
-      tags: data.tags,
-      ambientVibe: data.ambientVibe,
-      isLive: true,
-      createdAt: Date.now(),
+      id: `room-${Date.now()}`, title: data.title, topic: data.topic, hostUid: currentUser.uid,
+      hostUsername: currentUser.username, hostDisplayName: currentUser.displayName, hostAvatar: currentUser.photoURL,
+      speakers: [hostParticipant], listeners: [], tags: data.tags, ambientVibe: data.ambientVibe, isLive: true, createdAt: Date.now(),
     };
-
     setVoiceRooms((prev) => [newRoom, ...prev]);
     setActiveVoiceRoom(newRoom);
     setIsVoiceRoomModalOpen(true);
-
     if (isFirebaseConfigured && db) {
-      try {
-        await addDoc(collection(db, 'voice_rooms'), {
-          ...newRoom,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        console.warn('Firestore create room error:', err);
-      }
+      try { await addDoc(collection(db, 'voice_rooms'), { ...newRoom, createdAt: serverTimestamp(), }); } catch (err) {}
     }
   };
 
   const handleJoinVoiceRoom = (room: VoiceRoom) => {
     const userParticipant: RoomParticipant = currentUser
-      ? {
-          uid: currentUser.uid,
-          username: currentUser.username,
-          displayName: currentUser.displayName,
-          avatar: currentUser.photoURL,
-          isHost: currentUser.uid === room.hostUid,
-          isSpeaker: currentUser.uid === room.hostUid,
-          isMuted: false,
-          isSpeaking: false,
-          joinedAt: Date.now(),
-        }
-      : {
-          uid: `guest-${Date.now()}`,
-          username: `listener_${Math.floor(100 + Math.random() * 900)}`,
-          displayName: 'Guest Listener',
-          avatar: '',
-          isSpeaker: false,
-          joinedAt: Date.now(),
-        };
-
+      ? { uid: currentUser.uid, username: currentUser.username, displayName: currentUser.displayName, avatar: currentUser.photoURL, isHost: currentUser.uid === room.hostUid, isSpeaker: currentUser.uid === room.hostUid, isMuted: false, isSpeaking: false, joinedAt: Date.now(), }
+      : { uid: `guest-${Date.now()}`, username: `listener_${Math.floor(100 + Math.random() * 900)}`, displayName: 'Guest Listener', avatar: '', isSpeaker: false, joinedAt: Date.now(), };
     const inSpeakers = room.speakers.some((s) => s.uid === userParticipant.uid);
     const inListeners = room.listeners.some((l) => l.uid === userParticipant.uid);
-
     let updatedRoom = room;
     if (!inSpeakers && !inListeners) {
-      if (userParticipant.isSpeaker) {
-        updatedRoom = { ...room, speakers: [...room.speakers, userParticipant] };
-      } else {
-        updatedRoom = { ...room, listeners: [...room.listeners, userParticipant] };
-      }
+      if (userParticipant.isSpeaker) updatedRoom = { ...room, speakers: [...room.speakers, userParticipant] };
+      else updatedRoom = { ...room, listeners: [...room.listeners, userParticipant] };
     }
-
     setActiveVoiceRoom(updatedRoom);
     setIsVoiceRoomModalOpen(true);
     setVoiceRooms((prev) => prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)));
@@ -679,63 +532,32 @@ export default function App() {
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   };
 
-  // Navigation tab switch guard
   const handleTabChange = (tab: NavTab) => {
-    if (!currentUser && (tab === 'upload' || tab === 'profile')) {
-      setIsLoginModalOpen(true);
-      return;
-    }
+    if (!currentUser && (tab === 'upload' || tab === 'profile')) return setIsLoginModalOpen(true);
     setActiveTab(tab);
+    localStorage.setItem('noise_active_tab', tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const savedPosts = currentUser
-    ? posts.filter((p) => p.savedBy?.includes(currentUser.uid))
-    : [];
+  const savedPosts = currentUser ? posts.filter((p) => p.savedBy?.includes(currentUser.uid)) : [];
 
   return (
     <div className="min-h-screen bg-black flex justify-center text-zinc-100 selection:bg-rose-500/30 selection:text-white">
-      {/* Central Mobile Container with Instagram Aesthetic */}
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
-        {/* Top Header */}
-        <Header
-          currentUser={currentUser}
-          onOpenLogin={() => setIsLoginModalOpen(true)}
-          onSignOut={handleSignOut}
-          onOpenDirect={() => setIsDirectModalOpen(true)}
-          onOpenNotifications={() => setIsNotificationsOpen(true)}
-          onOpenVoiceRooms={() => setIsVoiceRoomsListOpen(true)}
+        <Header 
+          currentUser={currentUser} 
+          onOpenLogin={() => setIsLoginModalOpen(true)} 
+          onSignOut={handleSignOut} 
+          onOpenDirect={() => toggleDirectModal(true)} 
+          onOpenNotifications={() => setIsNotificationsOpen(true)} 
+          onOpenVoiceRooms={() => setIsVoiceRoomsListOpen(true)} 
         />
 
-        {/* Tab Pages */}
         <main className="flex-1">
-          {/* HOME FEED TAB */}
           {activeTab === 'home' && (
             <div>
-              {/* Stories Bar */}
-              <StoriesBar
-                stories={stories}
-                currentUser={currentUser}
-                onOpenStory={(index) => setActiveStoryIndex(index)}
-                onAddStory={handleAddUserStory}
-              />
-
-              {/* Live Voice Rooms Bar */}
-              <LiveVoiceRoomsBar
-                rooms={voiceRooms}
-                currentUser={currentUser}
-                onOpenCreateRoom={() => {
-                  if (!currentUser) {
-                    setIsLoginModalOpen(true);
-                    return;
-                  }
-                  setIsCreateVoiceRoomOpen(true);
-                }}
-                onJoinRoom={handleJoinVoiceRoom}
-                onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)}
-              />
-
-              {/* Feed Posts */}
+              <StoriesBar stories={stories} currentUser={currentUser} onOpenStory={(index) => setActiveStoryIndex(index)} onAddStory={handleAddUserStory} />
+              <LiveVoiceRoomsBar rooms={voiceRooms} currentUser={currentUser} onOpenCreateRoom={() => { if (!currentUser) return setIsLoginModalOpen(true); setIsCreateVoiceRoomOpen(true); }} onJoinRoom={handleJoinVoiceRoom} onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)} />
               <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
                 {isLoadingPosts ? (
                   <div className="flex flex-col items-center justify-center py-24 text-zinc-400 gap-2">
@@ -745,186 +567,39 @@ export default function App() {
                 ) : posts.length === 0 ? (
                   <div className="text-center py-24 px-4 text-zinc-400">
                     <p className="text-base font-bold text-white">No posts yet</p>
-                    <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-                      Be the first to share a moment! Apply filters like grayscale, sepia, or brightness and post.
-                    </p>
-                    <button
-                      onClick={() => handleTabChange('upload')}
-                      className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
-                    >
-                      Create First Post
-                    </button>
+                    <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">Be the first to share a moment! Apply filters like grayscale, sepia, or brightness and post.</p>
+                    <button onClick={() => handleTabChange('upload')} className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all">Create First Post</button>
                   </div>
                 ) : (
                   posts.map((post) => (
-                    <PostCard
-                      key={post.id}
-                      post={post}
-                      currentUser={currentUser}
-                      onLikeToggle={handleLikeToggle}
-                      onSaveToggle={handleSaveToggle}
-                      onOpenComments={(p) => setActiveCommentPost(p)}
-                      onQuickComment={handleAddComment}
-                      onDeletePost={handleDeletePost}
-                      onRequireLogin={() => setIsLoginModalOpen(true)}
-                    />
+                    <PostCard key={post.id} post={post} currentUser={currentUser} onLikeToggle={handleLikeToggle} onSaveToggle={handleSaveToggle} onOpenComments={(p) => setActiveCommentPost(p)} onQuickComment={handleAddComment} onDeletePost={handleDeletePost} onRequireLogin={() => setIsLoginModalOpen(true)} />
                   ))
                 )}
               </div>
             </div>
           )}
 
-          {/* EXPLORE / SEARCH TAB */}
-          {activeTab === 'search' && (
-            <ExploreView
-              allPosts={posts}
-              onSelectPost={(post) => setSelectedDetailPost(post)}
-            />
-          )}
-
-          {/* CREATE / UPLOAD POST TAB */}
-          {activeTab === 'upload' && (
-            <UploadView
-              currentUser={currentUser}
-              onPostCreated={handleCreatePost}
-              onCancel={() => setActiveTab('home')}
-              onRequireLogin={() => setIsLoginModalOpen(true)}
-            />
-          )}
-
-          {/* REELS TAB */}
-          {activeTab === 'reels' && (
-            <ReelsView onGoToUpload={() => handleTabChange('upload')} />
-          )}
-
-          {/* PROFILE TAB */}
-          {activeTab === 'profile' && (
-            <ProfileView
-              currentUser={currentUser}
-              posts={posts}
-              savedPosts={savedPosts}
-              onUpdateAvatar={handleUpdateAvatar}
-              onRemoveAvatar={handleRemoveAvatar}
-              onUpdateProfile={handleUpdateProfile}
-              onSelectPost={(post) => setSelectedDetailPost(post)}
-              onOpenUpload={() => setActiveTab('upload')}
-              onRequireLogin={() => setIsLoginModalOpen(true)}
-            />
-          )}
+          {activeTab === 'search' && <ExploreView allPosts={posts} onSelectPost={(post) => setSelectedDetailPost(post)} />}
+          {activeTab === 'upload' && <UploadView currentUser={currentUser} onPostCreated={handleCreatePost} onCancel={() => handleTabChange('home')} onRequireLogin={() => setIsLoginModalOpen(true)} />}
+          {activeTab === 'reels' && <ReelsView onGoToUpload={() => handleTabChange('upload')} />}
+          {activeTab === 'profile' && <ProfileView currentUser={currentUser} posts={posts} savedPosts={savedPosts} onUpdateAvatar={handleUpdateAvatar} onRemoveAvatar={handleRemoveAvatar} onUpdateProfile={handleUpdateProfile} onSelectPost={(post) => setSelectedDetailPost(post)} onOpenUpload={() => handleTabChange('upload')} onRequireLogin={() => setIsLoginModalOpen(true)} />}
         </main>
 
-        {/* Bottom Navigation */}
-        <BottomNav
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          currentUser={currentUser}
-        />
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} currentUser={currentUser} />
 
-        {/* Story Viewer Modal */}
-        {activeStoryIndex !== null && stories[activeStoryIndex] && (
-          <StoryViewerModal
-            stories={stories}
-            initialIndex={activeStoryIndex}
-            onClose={() => setActiveStoryIndex(null)}
-            onStorySeen={handleStorySeen}
-          />
-        )}
+        {activeStoryIndex !== null && stories[activeStoryIndex] && <StoryViewerModal stories={stories} initialIndex={activeStoryIndex} onClose={() => setActiveStoryIndex(null)} onStorySeen={handleStorySeen} />}
+        {activeCommentPost && <CommentsModal post={activeCommentPost} currentUser={currentUser} onClose={() => setActiveCommentPost(null)} onAddComment={handleAddComment} onDeleteComment={handleDeleteComment} />}
+        {selectedDetailPost && <PostDetailModal post={selectedDetailPost} currentUser={currentUser} onClose={() => setSelectedDetailPost(null)} onLikeToggle={handleLikeToggle} onSaveToggle={handleSaveToggle} onOpenComments={(p) => setActiveCommentPost(p)} onQuickComment={handleAddComment} onDeletePost={handleDeletePost} onRequireLogin={() => setIsLoginModalOpen(true)} />}
+        
+        <DirectMessagesModal isOpen={isDirectModalOpen} onClose={() => toggleDirectModal(false)} currentUser={currentUser} />
+        
+        <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
+        <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
 
-        {/* Comments Modal Sheet */}
-        {activeCommentPost && (
-          <CommentsModal
-            post={activeCommentPost}
-            currentUser={currentUser}
-            onClose={() => setActiveCommentPost(null)}
-            onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment}
-          />
-        )}
-
-        {/* Post Detail Modal (Explore or Profile grid inspect) */}
-        {selectedDetailPost && (
-          <PostDetailModal
-            post={selectedDetailPost}
-            currentUser={currentUser}
-            onClose={() => setSelectedDetailPost(null)}
-            onLikeToggle={handleLikeToggle}
-            onSaveToggle={handleSaveToggle}
-            onOpenComments={(p) => setActiveCommentPost(p)}
-            onQuickComment={handleAddComment}
-            onDeletePost={handleDeletePost}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        {/* Direct Messages Drawer Modal */}
-        <DirectMessagesModal
-          isOpen={isDirectModalOpen}
-          onClose={() => setIsDirectModalOpen(false)}
-          currentUser={currentUser}
-        />
-
-        {/* Notifications Activity Modal */}
-        <NotificationsModal
-          isOpen={isNotificationsOpen}
-          onClose={() => setIsNotificationsOpen(false)}
-        />
-
-        {/* Login / Auth Modal */}
-        <LoginModal
-          isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-          }}
-        />
-
-        {/* Floating Mini-Player Bar when Voice Room is Minimized */}
-        {activeVoiceRoom && !isVoiceRoomModalOpen && (
-          <VoiceRoomMiniPlayer
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            onExpand={() => setIsVoiceRoomModalOpen(true)}
-            onLeave={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-          />
-        )}
-
-        {/* Full Voice Room Modal Stage */}
-        {activeVoiceRoom && (
-          <VoiceRoomModal
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            isOpen={isVoiceRoomModalOpen}
-            onMinimize={() => setIsVoiceRoomModalOpen(false)}
-            onLeaveRoom={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        {/* Create Voice Room Modal */}
-        <CreateVoiceRoomModal
-          isOpen={isCreateVoiceRoomOpen}
-          onClose={() => setIsCreateVoiceRoomOpen(false)}
-          currentUser={currentUser}
-          onCreateRoom={handleCreateVoiceRoom}
-        />
-
-        {/* Voice Rooms Directory Modal */}
-        <VoiceRoomsListModal
-          isOpen={isVoiceRoomsListOpen}
-          onClose={() => setIsVoiceRoomsListOpen(false)}
-          rooms={voiceRooms}
-          currentUser={currentUser}
-          onJoinRoom={handleJoinVoiceRoom}
-          onOpenCreateRoom={() => {
-            if (!currentUser) {
-              setIsLoginModalOpen(true);
-              return;
-            }
-            setIsCreateVoiceRoomOpen(true);
-          }}
-        />
+        {activeVoiceRoom && !isVoiceRoomModalOpen && <VoiceRoomMiniPlayer room={activeVoiceRoom} currentUser={currentUser} onExpand={() => setIsVoiceRoomModalOpen(true)} onLeave={handleLeaveVoiceRoom} onUpdateRoom={handleUpdateActiveRoom} />}
+        {activeVoiceRoom && <VoiceRoomModal room={activeVoiceRoom} currentUser={currentUser} isOpen={isVoiceRoomModalOpen} onMinimize={() => setIsVoiceRoomModalOpen(false)} onLeaveRoom={handleLeaveVoiceRoom} onUpdateRoom={handleUpdateActiveRoom} onRequireLogin={() => setIsLoginModalOpen(true)} />}
+        <CreateVoiceRoomModal isOpen={isCreateVoiceRoomOpen} onClose={() => setIsCreateVoiceRoomOpen(false)} currentUser={currentUser} onCreateRoom={handleCreateVoiceRoom} />
+        <VoiceRoomsListModal isOpen={isVoiceRoomsListOpen} onClose={() => setIsVoiceRoomsListOpen(false)} rooms={voiceRooms} currentUser={currentUser} onJoinRoom={handleJoinVoiceRoom} onOpenCreateRoom={() => { if (!currentUser) return setIsLoginModalOpen(true); setIsCreateVoiceRoomOpen(true); }} />
       </div>
     </div>
   );
