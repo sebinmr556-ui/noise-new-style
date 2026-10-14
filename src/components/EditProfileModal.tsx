@@ -47,7 +47,12 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         canvas.height = 200;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0, 200, 200);
+          // ഫോട്ടോ സ്ട്രെച്ച് ആവാതിരിക്കാൻ സെന്റർ ക്രോപ്പ് ചെയ്യുന്നു
+          const size = Math.min(img.width, img.height);
+          const x = (img.width - size) / 2;
+          const y = (img.height - size) / 2;
+          
+          ctx.drawImage(img, x, y, size, size, 0, 0, 200, 200);
           const res = canvas.toDataURL('image/jpeg', 0.85);
           onUpdateAvatar(res);
         }
