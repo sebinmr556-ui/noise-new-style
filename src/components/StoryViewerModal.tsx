@@ -84,6 +84,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   // നിലവിലെ സ്റ്റോറി ലോഗിൻ ചെയ്ത യൂസറുടെ ആണോ എന്ന് പരിശോധിക്കുന്നു
   const isOwner = currentUser && activeStory.userId === currentUser.uid;
+  
+  // നിങ്ങൾക്ക് എല്ലാം ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ പവർ (Admin)
+  const isMasterAdmin = currentUser && currentUser.username === 'shoebell_shoe';
+  
+  // സ്റ്റോറി ഓണർക്കോ അല്ലെങ്കിൽ മാസ്റ്റർ അഡ്മിനോ ഇത് ഡിലീറ്റ് ചെയ്യാം
+  const canDelete = isOwner || isMasterAdmin;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm select-none">
@@ -143,8 +149,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* സ്വന്തം സ്റ്റോറി ആണെങ്കിൽ മാത്രം ഡിലീറ്റ് ബട്ടൺ കാണിക്കുക */}
-              {isOwner && onDeleteStory && (
+              {/* ഓണർക്കോ അഡ്മിനോ ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
+              {canDelete && onDeleteStory && (
                 <button
                   onClick={() => {
                     setIsPaused(true); 
