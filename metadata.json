@@ -1,0 +1,6 @@
+{
+  "name": "Noise - Instagram Style",
+  "description": "Instagram-inspired social platform with live voice chatrooms, photo feed, live stories, reels, profile management, and direct messaging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

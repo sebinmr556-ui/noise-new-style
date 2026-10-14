@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Posts Collection
+    match /posts/{postId} {
+      // Anyone can read posts in the public feed
+      allow read: if true;
+
+      // Authenticated users can create a post if their auth UID matches
+      allow create: if isSignedIn() 
+        && request.resource.data.uid == request.auth.uid;
+
+      // Allow updating likes, comments, or author updating the post
+      allow update: if isSignedIn();
+
+      // Only the author can delete their post
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    // Stories Collection
+    match /stories/{storyId} {
+      // Anyone can view stories
+      allow read: if true;
+
+      // Authenticated users can publish stories
+      allow create: if isSignedIn() 
+        && request.resource.data.uid == request.auth.uid;
+
+      // Only the author can delete their story
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+  }
+}

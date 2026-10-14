@@ -1,0 +1,48 @@
+{
+  "entities": {
+    "Post": {
+      "title": "Post",
+      "description": "A social media post with filtered image, caption, location, and likes.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Author user ID" },
+        "username": { "type": "string", "description": "Author username" },
+        "avatar": { "type": "string", "description": "Author avatar image URL" },
+        "image": { "type": "string", "description": "Processed image URL or base64 data URL" },
+        "caption": { "type": "string", "description": "Post caption" },
+        "location": { "type": "string", "description": "Optional location" },
+        "filter": { "type": "string", "description": "Filter preset used" },
+        "likes": { "type": "number", "description": "Total like count" },
+        "likedBy": { "type": "array", "description": "List of user IDs who liked" },
+        "savedBy": { "type": "array", "description": "List of user IDs who saved" },
+        "comments": { "type": "array", "description": "Post comments" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" }
+      },
+      "required": ["uid", "username", "image"]
+    },
+    "Story": {
+      "title": "Story",
+      "description": "Ephemeral 24-hour user story image or clip.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Author user ID" },
+        "username": { "type": "string", "description": "Author username" },
+        "avatar": { "type": "string", "description": "Author avatar URL" },
+        "mediaUrl": { "type": "string", "description": "Story media data URL" },
+        "caption": { "type": "string", "description": "Story caption" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp" }
+      },
+      "required": ["uid", "username", "mediaUrl"]
+    }
+  },
+  "firestore": {
+    "/posts/{postId}": {
+      "schema": "Post",
+      "description": "Feed and profile posts collection"
+    },
+    "/stories/{storyId}": {
+      "schema": "Story",
+      "description": "Stories tray collection"
+    }
+  }
+}

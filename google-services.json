@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "715181211247",
+    "project_id": "noise-new-62dd3",
+    "storage_bucket": "noise-new-62dd3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:715181211247:android:ec5c72f9cbacf9998d579a",
+        "android_client_info": {
+          "package_name": "com.aistudio.noise.plmxvt"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAs-zxNx2VUS_GFWkv_-GHCEDEVRy9d1x8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
