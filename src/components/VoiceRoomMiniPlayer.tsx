@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, MicOff, PhoneOff, Radio, Maximize2, Users, Music } from 'lucide-react';
+import { Mic, MicOff, PhoneOff, Maximize2, Users, Music } from 'lucide-react';
 import { VoiceRoom, AppUser } from '../types';
 import { playMicToggleSound } from '../utils/audioVibeEngine';
 
@@ -30,10 +30,14 @@ export const VoiceRoomMiniPlayer: React.FC<VoiceRoomMiniPlayerProps> = ({
     const nextMuted = !isMuted;
     playMicToggleSound(!nextMuted);
 
+    // Update Firebase state
     const updatedSpeakers = room.speakers.map((s) =>
       s.uid === currentUser.uid ? { ...s, isMuted: nextMuted } : s
     );
     onUpdateRoom({ ...room, speakers: updatedSpeakers });
+
+    // Send signal to VoiceRoomModal to mute hardware mic
+    window.dispatchEvent(new CustomEvent('mute-hardware-mic', { detail: nextMuted }));
   };
 
   const handleLeave = (e: React.MouseEvent) => {
