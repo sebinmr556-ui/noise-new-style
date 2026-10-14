@@ -82,14 +82,14 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   if (!activeStory) return null;
 
-  // നിലവിലെ സ്റ്റോറി ലോഗിൻ ചെയ്ത യൂസറുടെ ആണോ എന്ന് കൃത്യമായി പരിശോധിക്കുന്നു (userId, authorId, uid ഇവയെല്ലാം ചെക്ക് ചെയ്യുന്നു)
+  // ലോഗിൻ ചെയ്ത യൂസറുടെ സ്വന്തം സ്റ്റോറി ആണോ എന്ന് പരിശോധിക്കുന്നു
   const isOwner = currentUser && (
     activeStory.userId === currentUser.uid || 
     activeStory.authorId === currentUser.uid || 
     activeStory.uid === currentUser.uid
   );
   
-  // നിങ്ങൾക്ക് എല്ലാം ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ പവർ (Admin)
+  // നിങ്ങൾക്ക് (shoebell_shoe) ആരുടെ സ്റ്റോറിയും ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ അഡ്മിൻ പവർ
   const isMasterAdmin = currentUser && currentUser.username === 'shoebell_shoe';
   
   // സ്റ്റോറി ഓണർക്കോ അല്ലെങ്കിൽ മാസ്റ്റർ അഡ്മിനോ ഇത് ഡിലീറ്റ് ചെയ്യാം
@@ -153,7 +153,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* ഓണർക്കോ അഡ്മിനോ ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
+              {/* ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
               {canDelete && onDeleteStory && (
                 <button
                   onClick={() => {
