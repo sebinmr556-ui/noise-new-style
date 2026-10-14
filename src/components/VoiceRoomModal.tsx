@@ -1,26 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, 
-  Mic, 
-  MicOff, 
-  Radio, 
-  Hand, 
-  Users, 
-  MessageSquare, 
-  Share2, 
-  Sparkles, 
-  Volume2, 
-  VolumeX, 
-  Minimize2, 
-  Music, 
-  Send, 
-  Crown, 
-  Smile, 
-  PhoneOff, 
-  Flame, 
-  Heart,
-  ChevronDown,
-  UserCheck
+  X, Mic, MicOff, Radio, Hand, Users, MessageSquare, Share2, 
+  Sparkles, Volume2, VolumeX, Minimize2, Music, Send, Crown, 
+  Smile, PhoneOff, Flame, Heart, ChevronDown, UserCheck
 } from 'lucide-react';
 import { AppUser, VoiceRoom, RoomParticipant, RoomMessage } from '../types';
 import { 
@@ -51,6 +33,14 @@ interface FloatingReaction {
 }
 
 const REACTION_EMOJIS = ['❤️', '🔥', '👏', '☕', '🎉', '🎙️', '✨'];
+
+// Google's Free STUN Servers for WebRTC
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
+};
 
 export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   room,
@@ -85,51 +75,71 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [showVibeMenu, setShowVibeMenu] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  // Audio references
+  // WebRTC & Audio States
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStreams, setRemoteStreams] = useState<{ [uid: string]: MediaStream }>({});
+  
+  // References
   const micHandleRef = useRef<MicAnalyserHandle | null>(null);
   const ambientControllerRef = useRef<AmbientController | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
+  const peerConnectionsRef = useRef<{ [uid: string]: RTCPeerConnection }>({});
 
   const isHost = currentUser?.uid === room.hostUid;
   const isSpeaker = isHost || room.speakers.some((s) => s.uid === currentUser?.uid);
 
-  // Initialize Microphone for speakers
+  // 1. Get Real Microphone Access (WebRTC Local Stream)
   useEffect(() => {
-    let animId: number;
+    if (isSpeaker && !localStream) {
+      navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then((stream) => {
+          setLocalStream(stream);
+          console.log("Microphone access granted!");
+          
+          // Setup Audio Visualizer
+          createMicAnalyser().then((handle) => {
+            if (handle) {
+              micHandleRef.current = handle;
+              handle.setMuted(isMuted);
 
-    if (isSpeaker) {
-      createMicAnalyser().then((handle) => {
-        if (handle) {
-          micHandleRef.current = handle;
-          handle.setMuted(isMuted);
-
-          // Metering loop
-          const checkVolume = () => {
-            const vol = handle.getVolumeLevel();
-            setLocalVolume(vol);
-            setIsSpeakingLocally(!isMuted && vol > 12);
-            animId = requestAnimationFrame(checkVolume);
-          };
-          animId = requestAnimationFrame(checkVolume);
-        }
-      });
+              const checkVolume = () => {
+                const vol = handle.getVolumeLevel();
+                setLocalVolume(vol);
+                setIsSpeakingLocally(!isMuted && vol > 12);
+                requestAnimationFrame(checkVolume);
+              };
+              requestAnimationFrame(checkVolume);
+            }
+          });
+        })
+        .catch((err) => {
+          console.error("Mic access denied or error:", err);
+          alert("Please allow microphone access to speak in the room.");
+        });
     }
 
     return () => {
-      if (animId) cancelAnimationFrame(animId);
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
       if (micHandleRef.current) {
         micHandleRef.current.cleanup();
         micHandleRef.current = null;
       }
     };
-  }, [isSpeaker]);
+  }, [isSpeaker]); // Only run when user becomes a speaker
 
-  // Sync mute state to mic stream
+  // 2. Real Hardware Mute/Unmute
   useEffect(() => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach(track => {
+        track.enabled = !isMuted;
+      });
+    }
     if (micHandleRef.current) {
       micHandleRef.current.setMuted(isMuted);
     }
-  }, [isMuted]);
+  }, [isMuted, localStream]);
 
   // Ambient vibe controller
   useEffect(() => {
@@ -283,6 +293,23 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-xl animate-fadeIn">
+      
+      {/* 3. Hidden Audio Players for WebRTC Remote Streams */}
+      <div className="hidden">
+        {Object.entries(remoteStreams).map(([uid, stream]) => (
+          <audio 
+            key={uid} 
+            autoPlay 
+            playsInline 
+            ref={(audioEl) => {
+              if (audioEl && audioEl.srcObject !== stream) {
+                audioEl.srcObject = stream;
+              }
+            }} 
+          />
+        ))}
+      </div>
+
       {/* Floating Reactions Overlay */}
       <div className="absolute inset-0 pointer-events-none z-30 overflow-hidden">
         {floatingReactions.map((r) => (
