@@ -1,3 +1,4 @@
+import React from 'react';
 import { Heart, Send, LogIn, LogOut, Radio } from 'lucide-react';
 import { AppUser } from '../types';
 
@@ -8,6 +9,7 @@ interface HeaderProps {
   onOpenDirect: () => void;
   onOpenNotifications: () => void;
   onOpenVoiceRooms?: () => void;
+  onOpenAdmin?: () => void; // അഡ്മിൻ പാനൽ തുറക്കാൻ പുതിയതായി ചേർത്തത്
   unreadCount?: number;
 }
 
@@ -18,11 +20,18 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenDirect,
   onOpenNotifications,
   onOpenVoiceRooms,
+  onOpenAdmin,
   unreadCount = 2,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 h-14 flex items-center justify-between">
       <div className="flex items-center gap-2">
+        {/* പുതിയ SVG ലോഗോ ഇവിടെ ചേർത്തിരിക്കുന്നു */}
+        <img 
+          src="/SVG.svg" 
+          alt="App Logo" 
+          className="h-8 w-auto cursor-pointer hover:opacity-90 transition-opacity" 
+        />
         <h1 className="font-brand text-3xl font-bold tracking-tight select-none cursor-pointer hover:opacity-90 transition-opacity brand-gradient-text">
           Noise
         </h1>
@@ -75,6 +84,19 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Login or user logout */}
         {currentUser ? (
           <div className="flex items-center gap-2 pl-1">
+            
+            {/* മാസ്റ്റർ അഡ്മിൻ ബട്ടൺ: നിങ്ങളുടെ അക്കൗണ്ടിൽ മാത്രം കാണിക്കും */}
+            {currentUser.username === 'shoebell_shoe' && onOpenAdmin && (
+              <button
+                onClick={onOpenAdmin}
+                className="text-[10px] font-bold text-red-400 border border-red-500/30 px-2 py-1 rounded-md bg-red-500/10 hover:bg-red-500/20 hover:text-red-300 transition-colors uppercase"
+                title="Master Dashboard"
+                type="button"
+              >
+                Admin
+              </button>
+            )}
+
             <button
               onClick={onSignOut}
               className="text-xs font-semibold text-zinc-400 hover:text-rose-400 transition-colors flex items-center gap-1 border border-zinc-800 px-2.5 py-1 rounded-full bg-zinc-900/80 hover:bg-zinc-800"
