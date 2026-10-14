@@ -1,19 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, Send, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Story } from '../types';
+import { X, Heart, Send, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { Story, AppUser } from '../types';
 
 interface StoryViewerModalProps {
   stories: Story[];
   initialIndex: number;
+  currentUser: AppUser | null;
   onClose: () => void;
   onStorySeen?: (storyId: string) => void;
+  onDeleteStory?: (storyId: string) => void;
 }
 
 export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   stories,
   initialIndex,
+  currentUser,
   onClose,
   onStorySeen,
+  onDeleteStory,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [progress, setProgress] = useState(0);
@@ -78,6 +82,9 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   if (!activeStory) return null;
 
+  // നിലവിലെ സ്റ്റോറി ലോഗിൻ ചെയ്ത യൂസറുടെ ആണോ എന്ന് പരിശോധിക്കുന്നു
+  const isOwner = currentUser && activeStory.userId === currentUser.uid;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm select-none">
       <div 
@@ -135,13 +142,34 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors"
-              type="button"
-            >
-              <X className="w-6 h-6" />
-            </button>
+            <div className="flex items-center gap-2">
+              {/* സ്വന്തം സ്റ്റോറി ആണെങ്കിൽ മാത്രം ഡിലീറ്റ് ബട്ടൺ കാണിക്കുക */}
+              {isOwner && onDeleteStory && (
+                <button
+                  onClick={() => {
+                    setIsPaused(true); 
+                    if (window.confirm("ഈ സ്റ്റോറി ഡിലീറ്റ് ചെയ്യണോ?")) {
+                      onDeleteStory(activeStory.id);
+                      onClose();
+                    } else {
+                      setIsPaused(false);
+                    }
+                  }}
+                  className="p-1.5 rounded-full text-white/90 hover:text-red-500 hover:bg-white/10 transition-colors"
+                  type="button"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              )}
+              
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors"
+                type="button"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
           </div>
         </div>
 
