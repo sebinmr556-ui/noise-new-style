@@ -9,12 +9,11 @@ import {
   orderBy, 
   serverTimestamp 
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
+import { db, isFirebaseConfigured } from './firebase'; // നിങ്ങളുടെ ഫയർബേസ് കോൺഫിഗറേഷൻ ഇംപോർട്ട് ചെയ്യുക
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
 import { Story, AppUser } from './types';
-import { Home, Search, PlusSquare, Clapperboard, User, Radio } from 'lucide-react';
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>({
@@ -26,14 +25,13 @@ export function App() {
   const [stories, setStories] = useState<Story[]>([]);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
-  
-  // നാവിഗേഷൻ ടാബുകളും പേജുകളും ട്രാക്ക് ചെയ്യാൻ
-  const [activeTab, setActiveTab] = useState<'home' | 'search' | 'rooms' | 'reels' | 'profile'>('home');
-  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
   // ഫയർബേസിൽ നിന്ന് സ്റ്റോറികൾ ലൈവ് ആയി ഫെച്ച് ചെയ്യുക
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) return;
+    if (!isFirebaseConfigured || !db) {
+      // ഫയർബേസ് ഇല്ലെങ്കിൽ ഡമ്മി ഡാറ്റ ഉപയോഗിക്കാം
+      return;
+    }
 
     const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -129,7 +127,7 @@ export function App() {
     input.click();
   };
 
-  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ (മാസ്റ്റർ അഡ്മിൻ പവറോട് കൂടി)
+  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള മെയിൻ ഫങ്ഷൻ
   const handleDeleteStory = async (storyId: string) => {
     if (isFirebaseConfigured && db) {
       try {
@@ -143,7 +141,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-20 select-none">
+    <div className="min-h-screen bg-zinc-950 text-white pb-16">
       {/* Header */}
       <Header 
         currentUser={currentUser} 
@@ -151,80 +149,25 @@ export function App() {
         onSignOut={() => setCurrentUser(null)}
         onOpenDirect={() => {}}
         onOpenNotifications={() => {}}
-        onOpenVoiceRooms={() => setActiveTab('rooms')}
-        onOpenAdmin={() => setIsAdminDashboardOpen(true)}
       />
 
-      {/* Main Content Area based on Active Tab */}
-      {activeTab === 'home' && (
-        <div>
-          {/* Stories Bar */}
-          <StoriesBar 
-            stories={stories}
-            currentUser={currentUser}
-            onOpenStory={(index) => {
-              setSelectedStoryIndex(index);
-              setIsStoryModalOpen(true);
-            }}
-            onAddStory={handleAddUserStory}
-          />
+      {/* Stories Bar */}
+      <StoriesBar 
+        stories={stories}
+        currentUser={currentUser}
+        onOpenStory={(index) => {
+          setSelectedStoryIndex(index);
+          setIsStoryModalOpen(true);
+        }}
+        onAddStory={handleAddUserStory}
+      />
 
-          {/* Feed Content */}
-          <div className="p-4 space-y-4">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-400">
-              <p className="text-lg font-semibold text-white">Welcome to Noise Pro Feed</p>
-              <p className="text-sm mt-1">Explore posts, stories, and chatrooms here.</p>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Main Content / Feed Area */}
+      <div className="p-4 text-center text-zinc-500">
+        <p>Welcome to Noise Pro Feed</p>
+      </div>
 
-      {activeTab === 'rooms' && (
-        <div className="p-4 space-y-4">
-          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <Radio className="w-6 h-6 text-emerald-500 animate-pulse" />
-              Voice Chatrooms
-            </h2>
-          </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-400">
-            <p className="text-white font-medium">Live Voice Rooms are active</p>
-            <p className="text-xs mt-1">Join or host rooms seamlessly.</p>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'search' && (
-        <div className="p-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-3 text-zinc-400 text-sm">
-            Search users, posts, and tags...
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'reels' && (
-        <div className="p-4 text-center text-zinc-400">
-          <p className="text-white font-medium">Reels Feed</p>
-        </div>
-      )}
-
-      {activeTab === 'profile' && (
-        <div className="p-4 space-y-4">
-          <div className="flex items-center gap-4 bg-zinc-900 border border-zinc-800 p-4 rounded-xl">
-            <img 
-              src={currentUser?.photoURL || 'https://via.placeholder.com/150'} 
-              alt="Profile" 
-              className="w-16 h-16 rounded-full object-cover"
-            />
-            <div>
-              <h3 className="font-bold text-lg text-white">{currentUser?.username || 'User'}</h3>
-              <p className="text-xs text-zinc-400">Noise Pro Member</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Story Viewer Modal */}
+      {/* Story Viewer Modal (ഡിലീറ്റ് പ്രോപ് ഇവിടെയാണ് പാസ്സ് ചെയ്തിരിക്കുന്നത്) */}
       {isStoryModalOpen && selectedStoryIndex !== null && (
         <StoryViewerModal
           stories={stories}
@@ -234,25 +177,6 @@ export function App() {
           onDeleteStory={handleDeleteStory}
         />
       )}
-
-      {/* Bottom Navigation Bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800/80 px-4 py-2 flex items-center justify-around">
-        <button onClick={() => setActiveTab('home')} className={`p-2 transition-colors ${activeTab === 'home' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
-          <Home className="w-6 h-6" />
-        </button>
-        <button onClick={() => setActiveTab('search')} className={`p-2 transition-colors ${activeTab === 'search' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
-          <Search className="w-6 h-6" />
-        </button>
-        <button onClick={handleAddUserStory} className={`p-2 transition-colors text-zinc-400 hover:text-white`}>
-          <PlusSquare className="w-6 h-6" />
-        </button>
-        <button onClick={() => setActiveTab('reels')} className={`p-2 transition-colors ${activeTab === 'reels' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
-          <Clapperboard className="w-6 h-6" />
-        </button>
-        <button onClick={() => setActiveTab('profile')} className={`p-2 transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
-          <User className="w-6 h-6" />
-        </button>
-      </nav>
     </div>
   );
 }
