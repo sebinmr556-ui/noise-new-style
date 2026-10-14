@@ -82,8 +82,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   if (!activeStory) return null;
 
-  // നിലവിലെ സ്റ്റോറി ലോഗിൻ ചെയ്ത യൂസറുടെ ആണോ എന്ന് പരിശോധിക്കുന്നു
-  const isOwner = currentUser && activeStory.userId === currentUser.uid;
+  // നിലവിലെ സ്റ്റോറി ലോഗിൻ ചെയ്ത യൂസറുടെ ആണോ എന്ന് കൃത്യമായി പരിശോധിക്കുന്നു (userId, authorId, uid ഇവയെല്ലാം ചെക്ക് ചെയ്യുന്നു)
+  const isOwner = currentUser && (
+    activeStory.userId === currentUser.uid || 
+    activeStory.authorId === currentUser.uid || 
+    activeStory.uid === currentUser.uid
+  );
   
   // നിങ്ങൾക്ക് എല്ലാം ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ പവർ (Admin)
   const isMasterAdmin = currentUser && currentUser.username === 'shoebell_shoe';
