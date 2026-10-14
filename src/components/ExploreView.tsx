@@ -25,6 +25,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTag, setSelectedTag] = useState('All');
 
+  // പോസ്റ്റുകൾ ഫിൽറ്റർ ചെയ്ത ശേഷം ലൈക്കിന്റെ അടിസ്ഥാനത്തിൽ (Trending) അടുക്കുന്നു
   const filteredPosts = allPosts.filter((post) => {
     const query = searchQuery.toLowerCase().trim();
     const tagMatch =
@@ -40,7 +41,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         post.username.toLowerCase().includes(query) ||
         (post.location && post.location.toLowerCase().includes(query)))
     );
-  });
+  }).sort((a, b) => (b.likes || 0) - (a.likes || 0));
 
   return (
     <div className="bg-zinc-950 text-zinc-100 min-h-[calc(100vh-110px)] pb-20">
