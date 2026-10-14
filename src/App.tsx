@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { updateProfile } from 'firebase/auth';
+import { setDoc, getDoc } from 'firebase/firestore'; // പുതിയതായി ചേർത്തത് (Database-ൽ സേവ് ചെയ്യാൻ)
 import { 
   auth, 
   db, 
@@ -49,18 +50,7 @@ export default function App() {
       const saved = localStorage.getItem('noise_current_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed) {
-          const savedCustomDp = localStorage.getItem('noise_custom_dp');
-          if (savedCustomDp && savedCustomDp.startsWith('data:image')) {
-            parsed.photoURL = savedCustomDp;
-          } else if (
-            typeof parsed.photoURL === 'string' &&
-            (parsed.photoURL.includes('unsplash.com') || parsed.photoURL.includes('ui-avatars.com'))
-          ) {
-            parsed.photoURL = '';
-          }
-          return parsed;
-        }
+        if (parsed) return parsed;
       }
       return null;
     } catch {
@@ -87,7 +77,6 @@ export default function App() {
   const [selectedDetailPost, setSelectedDetailPost] = useState<Post | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(() => {
     return sessionStorage.getItem('noise_dm_open') === 'true';
   });
@@ -115,37 +104,33 @@ export default function App() {
     } catch {}
   }, [posts]);
 
-  // ഇതാണ് റിഫ്രഷ് ചെയ്യുമ്പോൾ ഡിപി പോകുന്നത് തടയുന്ന പ്രധാന ഭാഗം
+  // എവിടെ ലോഗിൻ ചെയ്താലും ഡാറ്റാബേസിൽ നിന്ന് നേരിട്ട് ഫോട്ടോ എടുക്കുന്നു
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) return;
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        setCurrentUser((prev) => {
-          let finalPhoto = user.photoURL || '';
-          const savedCustomDp = localStorage.getItem('noise_custom_dp');
-          
-          // ഫോണിൽ സേവ് ചെയ്ത ഡിപി ഉണ്ടെങ്കിൽ ഫയർബേസ് ഡിപി ഒഴിവാക്കുന്നു
-          if (prev?.photoURL && prev.photoURL.startsWith('data:image')) {
-            finalPhoto = prev.photoURL;
-          } else if (savedCustomDp && savedCustomDp.startsWith('data:image')) {
-            finalPhoto = savedCustomDp;
-          } else if (finalPhoto.includes('unsplash.com') || finalPhoto.includes('ui-avatars.com')) {
-            finalPhoto = '';
-          }
+        // 1. പെട്ടെന്ന് ആപ്പ് ലോഡ് ആവാൻ ബേസിക് വിവരങ്ങൾ കൊടുക്കുന്നു
+        setCurrentUser((prev) => ({
+          uid: user.uid,
+          displayName: user.displayName || prev?.displayName || 'User',
+          username: prev?.username || (user.displayName || 'user').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 15),
+          photoURL: prev?.photoURL || user.photoURL || '',
+          followersCount: prev?.followersCount || 0,
+          followingCount: prev?.followingCount || 0,
+        }));
 
-          return {
-            uid: user.uid,
-            displayName: user.displayName || prev?.displayName || 'User',
-            username: prev?.username || (user.displayName || 'user')
-              .toLowerCase()
-              .replace(/[^a-z0-9_]/g, '_')
-              .slice(0, 15),
-            photoURL: finalPhoto,
-            followersCount: prev?.followersCount || 0,
-            followingCount: prev?.followingCount || 0,
-          };
-        });
+        // 2. ഡാറ്റാബേസിൽ നിന്നും (Firestore) പെർമനെൻ്റ് ആയ ഡിപി എടുക്കുന്നു
+        if (db) {
+          try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            if (userDoc.exists() && userDoc.data().photoURL) {
+              setCurrentUser((prev) => prev ? { ...prev, photoURL: userDoc.data().photoURL } : null);
+            }
+          } catch (e) {
+            console.warn("Could not fetch DP from Database", e);
+          }
+        }
       }
     });
 
@@ -185,7 +170,6 @@ export default function App() {
         setIsLoadingPosts(false);
       },
       (error) => {
-        console.warn('Firestore posts listener warning:', error);
         setIsLoadingPosts(false);
       }
     );
@@ -209,7 +193,7 @@ export default function App() {
         });
         setStories(firestoreStories);
       },
-      (error) => console.warn('Firestore stories warning:', error)
+      () => {}
     );
 
     const roomsQuery = query(collection(db, 'voice_rooms'), orderBy('createdAt', 'desc'));
@@ -247,7 +231,7 @@ export default function App() {
           });
         }
       },
-      (error) => console.debug('Firestore rooms warning:', error)
+      () => {}
     );
 
     return () => {
@@ -259,7 +243,7 @@ export default function App() {
 
   const handleSignOut = async () => {
     if (isFirebaseConfigured && auth) {
-      try { await fbSignOut(auth); } catch (e) { console.error(e); }
+      try { await fbSignOut(auth); } catch (e) { }
     }
     setCurrentUser(null);
     handleTabChange('home');
@@ -360,7 +344,7 @@ export default function App() {
           comments: [],
         });
         newPostId = docRef.id;
-      } catch (err) { console.warn('Firestore write warning:', err); }
+      } catch (err) {}
     }
     const newPost: Post = {
       id: newPostId,
@@ -397,22 +381,23 @@ export default function App() {
     if (isFirebaseConfigured && auth?.currentUser) {
       try {
         await updateProfile(auth.currentUser, { displayName: updates.displayName });
-      } catch (e) {
-        console.warn('Firebase profile error:', e);
-      }
+      } catch (e) {}
     }
   };
 
+  // ഡിപി നേരിട്ട് ഫയർബേസ് ഡാറ്റാബേസിൽ (users collection) സേവ് ചെയ്യുന്നു!
   const handleUpdateAvatar = async (dataUrl: string) => {
     if (!currentUser) return;
+    
+    // ഫോട്ടോ ആപ്പിൽ മാറ്റുന്നു
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: dataUrl } : null));
-    localStorage.setItem('noise_custom_dp', dataUrl); // Force save DP local
 
-    if (isFirebaseConfigured && auth?.currentUser) {
+    if (isFirebaseConfigured && db) {
       try {
-        await updateProfile(auth.currentUser, { photoURL: dataUrl });
+        // ഫയർബേസ് ഡാറ്റാബേസിലേക്ക് (Firestore) പുതിയ ഫോട്ടോ സേവ് ചെയ്യുന്നു
+        await setDoc(doc(db, 'users', currentUser.uid), { photoURL: dataUrl }, { merge: true });
       } catch (e) {
-        console.warn('Firebase avatar error:', e);
+        console.warn('Database save error:', e);
       }
     }
   };
@@ -420,14 +405,12 @@ export default function App() {
   const handleRemoveAvatar = async () => {
     if (!currentUser) return;
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: '' } : null));
-    localStorage.removeItem('noise_custom_dp'); // Remove local DP
 
-    if (isFirebaseConfigured && auth?.currentUser) {
+    if (isFirebaseConfigured && db) {
       try {
-        await updateProfile(auth.currentUser, { photoURL: '' });
-      } catch (e) {
-        console.warn('Firebase avatar error:', e);
-      }
+        // ഡാറ്റാബേസിൽ നിന്നും ഫോട്ടോ കളയുന്നു
+        await setDoc(doc(db, 'users', currentUser.uid), { photoURL: '' }, { merge: true });
+      } catch (e) {}
     }
   };
 
