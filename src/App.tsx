@@ -9,11 +9,12 @@ import {
   orderBy, 
   serverTimestamp 
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase'; // നിങ്ങളുടെ ഫയർബേസ് കോൺഫിഗറേഷൻ ഇംപോർട്ട് ചെയ്യുക
+import { db, isFirebaseConfigured } from './firebase';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
 import { Story, AppUser } from './types';
+import { Home, Search, PlusSquare, Clapperboard, User } from 'lucide-react'; // താഴത്തെ ടാബ് ഐക്കണുകൾ
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>({
@@ -25,13 +26,11 @@ export function App() {
   const [stories, setStories] = useState<Story[]>([]);
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('home'); // ആക്ടീവ് ടാബ് ട്രാക്ക് ചെയ്യാൻ
 
   // ഫയർബേസിൽ നിന്ന് സ്റ്റോറികൾ ലൈവ് ആയി ഫെച്ച് ചെയ്യുക
   useEffect(() => {
-    if (!isFirebaseConfigured || !db) {
-      // ഫയർബേസ് ഇല്ലെങ്കിൽ ഡമ്മി ഡാറ്റ ഉപയോഗിക്കാം
-      return;
-    }
+    if (!isFirebaseConfigured || !db) return;
 
     const q = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -127,7 +126,7 @@ export function App() {
     input.click();
   };
 
-  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള മെയിൻ ഫങ്ഷൻ
+  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ
   const handleDeleteStory = async (storyId: string) => {
     if (isFirebaseConfigured && db) {
       try {
@@ -141,7 +140,7 @@ export function App() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-16">
+    <div className="min-h-screen bg-zinc-950 text-white pb-20">
       {/* Header */}
       <Header 
         currentUser={currentUser} 
@@ -167,7 +166,7 @@ export function App() {
         <p>Welcome to Noise Pro Feed</p>
       </div>
 
-      {/* Story Viewer Modal (ഡിലീറ്റ് പ്രോപ് ഇവിടെയാണ് പാസ്സ് ചെയ്തിരിക്കുന്നത്) */}
+      {/* Story Viewer Modal */}
       {isStoryModalOpen && selectedStoryIndex !== null && (
         <StoryViewerModal
           stories={stories}
@@ -177,6 +176,25 @@ export function App() {
           onDeleteStory={handleDeleteStory}
         />
       )}
+
+      {/* Bottom Navigation Bar (താഴത്തെ ടാബുകൾ) */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-zinc-950 border-t border-zinc-800/80 px-4 py-2 flex items-center justify-around">
+        <button onClick={() => setActiveTab('home')} className={`p-2 ${activeTab === 'home' ? 'text-white' : 'text-zinc-400'}`}>
+          <Home className="w-6 h-6" />
+        </button>
+        <button onClick={() => setActiveTab('search')} className={`p-2 ${activeTab === 'search' ? 'text-white' : 'text-zinc-400'}`}>
+          <Search className="w-6 h-6" />
+        </button>
+        <button onClick={() => setActiveTab('add')} className={`p-2 ${activeTab === 'add' ? 'text-white' : 'text-zinc-400'}`}>
+          <PlusSquare className="w-6 h-6" />
+        </button>
+        <button onClick={() => setActiveTab('reels')} className={`p-2 ${activeTab === 'reels' ? 'text-white' : 'text-zinc-400'}`}>
+          <Clapperboard className="w-6 h-6" />
+        </button>
+        <button onClick={() => setActiveTab('profile')} className={`p-2 ${activeTab === 'profile' ? 'text-white' : 'text-zinc-400'}`}>
+          <User className="w-6 h-6" />
+        </button>
+      </nav>
     </div>
   );
 }
