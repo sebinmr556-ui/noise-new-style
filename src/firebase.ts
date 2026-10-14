@@ -23,12 +23,13 @@ import {
 } from 'firebase/firestore';
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyAs-zxNx2VUS_GFWkv_-GHCEDEVRy9d1x8",
-  authDomain: "noise-new-62dd3.firebaseapp.com",
-  projectId: "noise-new-62dd3",
-  storageBucket: "noise-new-62dd3.firebasestorage.app",
-  messagingSenderId: "715181211247",
-  appId: "1:715181211247:android:ec5c72f9cbacf9998d579a"
+    apiKey: "AIzaSyAnGiJd-r37GEaWXY4LN3VDzOQuqamAedY",
+  authDomain: "noise-new-style.firebaseapp.com",
+  projectId: "noise-new-style",
+  storageBucket: "noise-new-style.firebasestorage.app",
+  messagingSenderId: "923676895487",
+  appId: "1:923676895487:web:8eeedeb4d4bdab6bf844ca",
+  measurementId: "G-445G2XCXCX"
 };
 
 let app: any = null;
