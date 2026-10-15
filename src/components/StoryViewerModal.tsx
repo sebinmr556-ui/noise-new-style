@@ -89,11 +89,17 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     activeStory.uid === currentUser.uid
   );
   
-  // നിങ്ങൾക്ക് (shoebell_shoe) ആരുടെ സ്റ്റോറിയും ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ അഡ്മിൻ പവർ
+  // മാസ്റ്റർ അഡ്മിൻ പവർ (shoebell_shoe)
   const isMasterAdmin = currentUser?.username === 'shoebell_shoe';
-  
-  // സ്റ്റോറി ഓണർക്കോ അല്ലെങ്കിൽ മാസ്റ്റർ അഡ്മിനോ ഇത് ഡിലീറ്റ് ചെയ്യാം
   const canDelete = isOwner || isMasterAdmin;
+
+  // മീഡിയ വീഡിയോ ആണോ എന്ന് പരിശോധിക്കുന്നു
+  const isVideo = 
+    activeStory.mediaUrl?.includes('data:video/') || 
+    activeStory.mediaUrl?.includes('.mp4') || 
+    activeStory.mediaUrl?.includes('.webm') || 
+    activeStory.mediaUrl?.includes('.mov') ||
+    activeStory.caption?.includes('🎥');
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center backdrop-blur-sm select-none">
@@ -104,13 +110,23 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         onTouchStart={() => setIsPaused(true)}
         onTouchEnd={() => setIsPaused(false)}
       >
-        {/* Background Image / Story Media */}
-        <div className="absolute inset-0 z-0">
-          <img
-            src={activeStory.mediaUrl}
-            alt={activeStory.caption || 'Story'}
-            className="w-full h-full object-cover"
-          />
+        {/* Background Media (Image or Video Support) */}
+        <div className="absolute inset-0 z-0 bg-black flex items-center justify-center">
+          {isVideo ? (
+            <video
+              src={activeStory.mediaUrl}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+              onEnded={handleNext}
+            />
+          ) : (
+            <img
+              src={activeStory.mediaUrl}
+              alt={activeStory.caption || 'Story'}
+              className="w-full h-full object-cover"
+            />
+          )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
         </div>
 
