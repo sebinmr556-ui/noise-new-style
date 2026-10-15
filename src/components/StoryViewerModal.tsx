@@ -90,8 +90,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   );
   
   // നിങ്ങൾക്ക് (shoebell_shoe) ആരുടെ സ്റ്റോറിയും ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ അഡ്മിൻ പവർ
-  const isMasterAdmin =
-  currentUser?.username === 'shoebell_shoe';
+  const isMasterAdmin = currentUser?.username === 'shoebell_shoe';
   
   // സ്റ്റോറി ഓണർക്കോ അല്ലെങ്കിൽ മാസ്റ്റർ അഡ്മിനോ ഇത് ഡിലീറ്റ് ചെയ്യാം
   const canDelete = isOwner || isMasterAdmin;
@@ -135,7 +134,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             })}
           </div>
 
-          {/* User Details & Close button */}
+          {/* User Details & Delete/Close buttons */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <img
@@ -152,8 +151,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </span>
               </div>
             </div>
-            </div>
-          {/* Delete Story Button */}
 
             <div className="flex items-center gap-2">
               {/* ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
