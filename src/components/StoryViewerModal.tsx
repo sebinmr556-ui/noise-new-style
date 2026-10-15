@@ -51,7 +51,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             return 100;
           }
         }
-        return prev + 2; // ~5 seconds total
+        return prev + 2;
       });
     }, 100);
 
@@ -82,18 +82,15 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
   if (!activeStory) return null;
 
-  // ലോഗിൻ ചെയ്ത യൂസറുടെ സ്വന്തം സ്റ്റോറി ആണോ എന്ന് പരിശോധിക്കുന്നു
   const isOwner = currentUser && (
     activeStory.userId === currentUser.uid || 
     activeStory.authorId === currentUser.uid || 
     activeStory.uid === currentUser.uid
   );
   
-  // മാസ്റ്റർ അഡ്മിൻ പവർ (shoebell_shoe)
   const isMasterAdmin = currentUser?.username === 'shoebell_shoe';
   const canDelete = isOwner || isMasterAdmin;
 
-  // മീഡിയ വീഡിയോ ആണോ എന്ന് പരിശോധിക്കുന്നു
   const isVideo = 
     activeStory.mediaUrl?.includes('data:video/') || 
     activeStory.mediaUrl?.includes('.mp4') || 
@@ -110,21 +107,21 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
         onTouchStart={() => setIsPaused(true)}
         onTouchEnd={() => setIsPaused(false)}
       >
-        {/* Background Media (Image or Video Support) */}
+        {/* Background Media - object-contain ഉപയോഗിച്ചിരിക്കുന്നത് കൊണ്ട് ഫോട്ടോയോ വീഡിയോയോ സ്ട്രെച്ച് ആവില്ല */}
         <div className="absolute inset-0 z-0 bg-black flex items-center justify-center">
           {isVideo ? (
             <video
               src={activeStory.mediaUrl}
               autoPlay
               playsInline
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
               onEnded={handleNext}
             />
           ) : (
             <img
               src={activeStory.mediaUrl}
               alt={activeStory.caption || 'Story'}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none" />
@@ -132,7 +129,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
         {/* Top Progress Bars & User Info */}
         <div className="relative z-10 p-3 pt-3.5 space-y-2.5">
-          {/* Progress Indicators */}
           <div className="flex items-center gap-1.5 w-full">
             {stories.map((s, idx) => {
               let width = '0%';
@@ -150,7 +146,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             })}
           </div>
 
-          {/* User Details & Delete/Close buttons */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <img
@@ -169,7 +164,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2">
-              {/* ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
               {canDelete && onDeleteStory && (
                 <button
                   onClick={() => {
@@ -201,17 +195,10 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
         {/* Tap areas to navigate */}
         <div className="absolute inset-y-16 inset-x-0 z-10 flex">
-          <div
-            className="w-1/3 h-full cursor-pointer"
-            onClick={handlePrev}
-          />
-          <div
-            className="w-2/3 h-full cursor-pointer"
-            onClick={handleNext}
-          />
+          <div className="w-1/3 h-full cursor-pointer" onClick={handlePrev} />
+          <div className="w-2/3 h-full cursor-pointer" onClick={handleNext} />
         </div>
 
-        {/* Previous / Next Arrow buttons on desktop */}
         {currentIndex > 0 && (
           <button
             onClick={handlePrev}
@@ -239,7 +226,6 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </p>
           )}
 
-          {/* Quick Reaction Pills */}
           <div className="flex gap-2">
             {['🔥', '❤️', '😍', '👏', '🙌'].map((emoji) => (
               <button
