@@ -21,9 +21,10 @@ import {
   onSnapshot,
   Firestore
 } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
-    apiKey: "AIzaSyAnGiJd-r37GEaWXY4LN3VDzOQuqamAedY",
+  apiKey: "AIzaSyAnGiJd-r37GEaWXY4LN3VDzOQuqamAedY",
   authDomain: "noise-new-style.firebaseapp.com",
   projectId: "noise-new-style",
   storageBucket: "noise-new-style.firebasestorage.app",
@@ -35,12 +36,14 @@ export const firebaseConfig = {
 let app: any = null;
 let auth: any = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 let isFirebaseConfigured = false;
 
 try {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
+  storage = getStorage(app); // സ്റ്റോറേജ് ഇവിടെ ഇനിഷ്യലൈസ് ചെയ്തിരിക്കുന്നു
   isFirebaseConfigured = true;
 } catch (error) {
   console.warn("Firebase initialization warning:", error);
@@ -74,6 +77,7 @@ export {
   app, 
   auth, 
   db, 
+  storage, // സ്റ്റോറേജ് ഇവിടെ എക്സ്പോർട്ട് ചെയ്തിരിക്കുന്നു
   isFirebaseConfigured,
   GoogleAuthProvider, 
   signInWithPopup, 
