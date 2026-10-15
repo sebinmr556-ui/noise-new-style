@@ -15,7 +15,7 @@ import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
 import { Story, AppUser } from './types';
-import { Home, Search, PlusSquare, Clapperboard, User, Radio } from 'lucide-react';
+import { Home, Search, PlusSquare, Clapperboard, User, Radio, MessageSquare } from 'lucide-react';
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<AppUser | null>({
@@ -28,7 +28,7 @@ export function App() {
   const [selectedStoryIndex, setSelectedStoryIndex] = useState<number | null>(null);
   const [isStoryModalOpen, setIsStoryModalOpen] = useState(false);
   
-  // നാവിഗേഷൻ ടാബുകളും പേജുകളും ട്രാക്ക് ചെയ്യാൻ
+  // നാവിഗേഷൻ ടാബുകളും ചാറ്റ്‌റൂം പേജുകളും ട്രാക്ക് ചെയ്യാൻ
   const [activeTab, setActiveTab] = useState<'home' | 'search' | 'rooms' | 'reels' | 'profile'>('home');
   const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
@@ -64,7 +64,7 @@ export function App() {
     if (!currentUser) return;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,video/*'; // എല്ലാ ഇമേജും വീഡിയോ ഫോർമാറ്റുകളും സപ്പോർട്ട് ചെയ്യും
+    input.accept = 'image/*,video/*'; 
     
     input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
@@ -72,14 +72,12 @@ export function App() {
 
       if (isFirebaseConfigured && db && storage) {
         try {
-          // ഫയൽ ഫയർബേസ് സ്റ്റോറേജിലേക്ക് അപ്‌ലോഡ് ചെയ്യുന്നു
           const storageRef = ref(storage, `stories/${currentUser.uid}_${Date.now()}_${file.name}`);
           const snapshot = await uploadBytes(storageRef, file);
           const downloadUrl = await getDownloadURL(snapshot.ref);
 
           const isVideo = file.type.startsWith('video/');
 
-          // ഫയർസ്റ്റോറിൽ സ്റ്റോറി ഡാറ്റ സേവ് ചെയ്യുന്നു
           await addDoc(collection(db, 'stories'), {
             uid: currentUser.uid,
             userId: currentUser.uid,
@@ -121,7 +119,7 @@ export function App() {
         currentUser={currentUser} 
         onOpenLogin={() => {}}
         onSignOut={() => setCurrentUser(null)}
-        onOpenDirect={() => {}}
+        onOpenDirect={() => setActiveTab('rooms')}
         onOpenNotifications={() => {}}
         onOpenVoiceRooms={() => setActiveTab('rooms')}
         onOpenAdmin={() => setIsAdminDashboardOpen(true)}
@@ -151,17 +149,33 @@ export function App() {
         </div>
       )}
 
+      {/* Voice Chatrooms & Chat Section */}
       {activeTab === 'rooms' && (
         <div className="p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
             <h2 className="text-xl font-bold flex items-center gap-2">
               <Radio className="w-6 h-6 text-emerald-500 animate-pulse" />
-              Voice Chatrooms
+              Noise Voice Chatrooms
             </h2>
           </div>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-6 text-center text-zinc-400">
-            <p className="text-white font-medium">Live Voice Rooms are active</p>
-            <p className="text-xs mt-1">Join or host rooms seamlessly.</p>
+          <div className="grid gap-3">
+            <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Radio className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-semibold text-white">General Audio Lounge</h4>
+                  <p className="text-xs text-zinc-400">Active voice chat with creators</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => alert('Joining chatroom...')}
+                className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Join Room
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -196,7 +210,7 @@ export function App() {
         </div>
       )}
 
-      {/* Story Viewer Modal - onDeleteStory ഇവിടെ കൃത്യമായി പാസ്സ് ചെയ്തിട്ടുണ്ട് */}
+      {/* Story Viewer Modal */}
       {isStoryModalOpen && selectedStoryIndex !== null && (
         <StoryViewerModal
           stories={stories}
@@ -218,8 +232,8 @@ export function App() {
         <button onClick={handleAddUserStory} className={`p-2 transition-colors text-zinc-400 hover:text-white`}>
           <PlusSquare className="w-6 h-6" />
         </button>
-        <button onClick={() => setActiveTab('reels')} className={`p-2 transition-colors ${activeTab === 'reels' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
-          <Clapperboard className="w-6 h-6" />
+        <button onClick={() => setActiveTab('rooms')} className={`p-2 transition-colors ${activeTab === 'rooms' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
+          <MessageSquare className="w-6 h-6" />
         </button>
         <button onClick={() => setActiveTab('profile')} className={`p-2 transition-colors ${activeTab === 'profile' ? 'text-white' : 'text-zinc-400 hover:text-white'}`}>
           <User className="w-6 h-6" />
