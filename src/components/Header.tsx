@@ -9,7 +9,7 @@ interface HeaderProps {
   onOpenDirect: () => void;
   onOpenNotifications: () => void;
   onOpenVoiceRooms?: () => void;
-  onOpenAdmin?: () => void; // അഡ്മിൻ പാനൽ തുറക്കാൻ പുതിയതായി ചേർത്തത്
+  onOpenAdmin?: () => void;
   unreadCount?: number;
 }
 
@@ -21,12 +21,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotifications,
   onOpenVoiceRooms,
   onOpenAdmin,
-  unreadCount = 2,
+  unreadCount = 0, // സാമ്പിൾ 2 മാറ്റി 0 ആക്കിയിരിക്കുന്നു
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 h-14 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        {/* പുതിയ SVG ലോഗോ ഇവിടെ ചേർത്തിരിക്കുന്നു */}
         <img 
           src="/SVG.svg" 
           alt="App Logo" 
@@ -76,16 +75,12 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
         >
           <Send className="w-6 h-6 stroke-[1.8] -rotate-12" />
-          <span className="absolute top-0 right-0 text-[10px] bg-gradient-to-r from-rose-500 to-purple-600 text-white font-bold px-1 rounded-full min-w-[16px] text-center shadow-xs">
-            3
-          </span>
+          {/* സാമ്പിൾ 3 മാറ്റിയിരിക്കുന്നു, ആവശ്യമെങ്കിൽ unread count ഇവിടെ ഉപയോഗിക്കാം */}
         </button>
 
         {/* Login or user logout */}
         {currentUser ? (
           <div className="flex items-center gap-2 pl-1">
-            
-            {/* മാസ്റ്റർ അഡ്മിൻ ബട്ടൺ: നിങ്ങളുടെ അക്കൗണ്ടിൽ മാത്രം കാണിക്കും */}
             {currentUser.username === 'shoebell_shoe' && onOpenAdmin && (
               <button
                 onClick={onOpenAdmin}
