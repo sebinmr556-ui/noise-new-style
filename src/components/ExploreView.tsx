@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Heart, X } from 'lucide-react';
+import { Search, Heart, X, Video } from 'lucide-react';
 import { Post } from '../types';
 
 interface ExploreViewProps {
@@ -92,31 +92,55 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       {/* Explore Grid of Real Firebase Posts */}
       {filteredPosts.length > 0 ? (
         <div className="grid grid-cols-3 gap-1 p-1 mt-1">
-          {filteredPosts.map((post) => (
-            <div
-              key={post.id}
-              onClick={() => onSelectPost(post)}
-              className="group relative aspect-square bg-zinc-900 overflow-hidden cursor-pointer"
-            >
-              <img
-                src={post.image}
-                alt={post.caption || 'Explore post'}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-2">
-                <div className="flex items-center gap-1 font-bold text-xs">
-                  <Heart className="w-4 h-4 fill-white" />
-                  <span>{post.likes || 0}</span>
-                </div>
-                {post.caption && (
-                  <span className="text-[10px] text-zinc-200 mt-1 truncate max-w-full">
-                    {post.caption}
-                  </span>
+          {filteredPosts.map((post) => {
+            const isVideo =
+              post.mediaType === 'video' ||
+              post.image?.startsWith('data:video/') ||
+              post.image?.includes('.mp4') ||
+              post.image?.includes('.webm') ||
+              post.caption?.includes('🎥');
+
+            return (
+              <div
+                key={post.id}
+                onClick={() => onSelectPost(post)}
+                className="group relative aspect-square bg-zinc-900 overflow-hidden cursor-pointer"
+              >
+                {isVideo ? (
+                  <video
+                    src={post.image}
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 pointer-events-none"
+                  />
+                ) : (
+                  <img
+                    src={post.image}
+                    alt={post.caption || 'Explore post'}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
                 )}
+
+                {isVideo && (
+                  <div className="absolute top-1.5 right-1.5 p-1 bg-black/60 rounded-md text-white z-10">
+                    <Video className="w-3 h-3 text-white" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center text-white p-2">
+                  <div className="flex items-center gap-1 font-bold text-xs">
+                    <Heart className="w-4 h-4 fill-white" />
+                    <span>{post.likes || 0}</span>
+                  </div>
+                  {post.caption && (
+                    <span className="text-[10px] text-zinc-200 mt-1 truncate max-w-full">
+                      {post.caption}
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="text-center py-20 px-4 text-zinc-500 text-xs">

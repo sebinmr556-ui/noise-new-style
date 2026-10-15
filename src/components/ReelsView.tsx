@@ -1,13 +1,29 @@
 import React, { useState } from 'react';
 import { Heart, MessageCircle, Send, Volume2, VolumeX, Music, Disc3, Film } from 'lucide-react';
-import { Reel } from '../types';
+import { Reel, Post } from '../types';
 
 interface ReelsViewProps {
   onGoToUpload?: () => void;
+  allPosts?: Post[];
 }
 
-export const ReelsView: React.FC<ReelsViewProps> = ({ onGoToUpload }) => {
-  const [reels, setReels] = useState<Reel[]>([]);
+export const ReelsView: React.FC<ReelsViewProps> = ({ onGoToUpload, allPosts }) => {
+  const [reels, setReels] = useState<Reel[]>(() => {
+    if (!allPosts) return [];
+    return allPosts
+      .filter((p) => p.mediaType === 'video' || p.image?.startsWith('data:video/') || p.image?.includes('.mp4') || p.image?.includes('.webm') || p.caption?.includes('🎥'))
+      .map((p) => ({
+        id: p.id,
+        username: p.username,
+        avatar: p.avatar,
+        videoUrl: p.image,
+        posterUrl: '',
+        caption: p.caption || 'Video Reel',
+        musicTitle: 'Original Audio • ' + p.username,
+        likes: p.likes || 0,
+        commentsCount: p.comments?.length || 0,
+      }));
+  });
   const [isMuted, setIsMuted] = useState(true);
   const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
 

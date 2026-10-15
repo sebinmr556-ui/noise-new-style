@@ -38,6 +38,7 @@ import { VoiceRoomModal } from './components/VoiceRoomModal';
 import { VoiceRoomMiniPlayer } from './components/VoiceRoomMiniPlayer';
 import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
+import { TopLoadingBar } from './components/TopLoadingBar';
 import { Loader2 } from 'lucide-react';
 
 // ഫയലുകളെ Base64 ആക്കി മാറ്റുന്നതിനുള്ള ഫങ്ഷൻ
@@ -95,9 +96,10 @@ export default function App() {
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [isTopLoading, setIsTopLoading] = useState(false);
 
-  // Voice Chatrooms State
-  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(INITIAL_VOICE_ROOMS);
+  // Voice Chatrooms State (filtered to only user-created rooms)
+  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
   const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(false);
@@ -212,15 +214,37 @@ export default function App() {
     const unsubscribeRooms = onSnapshot(
       roomsQuery,
       (snapshot) => {
-        if (!snapshot.empty) {
-          const firestoreRooms: VoiceRoom[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
+        const firestoreRooms: VoiceRoom[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const docId = docSnap.id;
+
+          // Filter out dummy/mock chat rooms in Firestore fetch logic
+          const isDummy =
+            data.isDummy === true ||
+            docId.startsWith('room-1') ||
+            docId.startsWith('room-2') ||
+            docId.startsWith('room-3') ||
+            docId.startsWith('room-lofi') ||
+            docId.startsWith('room-street') ||
+            docId.startsWith('mock-') ||
+            docId.startsWith('dummy-') ||
+            data.hostUid === 'system' ||
+            data.hostUid === 'system-user-1' ||
+            data.hostUid === 'mock-user-1' ||
+            data.hostUid === 'u-1' ||
+            data.hostUid === 'u-2' ||
+            !data.hostUid ||
+            data.title?.toLowerCase().includes('dummy') ||
+            data.title?.toLowerCase().includes('mock test') ||
+            data.topic?.toLowerCase().includes('dummy');
+
+          if (!isDummy) {
             firestoreRooms.push({
               id: docSnap.id,
               title: data.title || 'Live Voice Room',
               topic: data.topic || 'Casual Hangout',
-              hostUid: data.hostUid || '',
+              hostUid: data.hostUid,
               hostUsername: data.hostUsername || 'user',
               hostDisplayName: data.hostDisplayName || 'User',
               hostAvatar: data.hostAvatar || '',
@@ -230,18 +254,13 @@ export default function App() {
               ambientVibe: data.ambientVibe || 'none',
               isLive: data.isLive !== false,
               createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
+              slotLikes: data.slotLikes || {},
             });
-          });
-          setVoiceRooms((prev) => {
-            const merged = [...firestoreRooms];
-            prev.forEach((p) => {
-              if (!merged.some((m) => m.id === p.id)) {
-                merged.push(p);
-              }
-            });
-            return merged;
-          });
-        }
+          }
+        });
+
+        // Set strictly user-created rooms
+        setVoiceRooms(firestoreRooms);
       },
       (error) => {
         console.debug('Firestore voice rooms notice:', error);
@@ -407,13 +426,16 @@ export default function App() {
     caption: string;
     location?: string;
     filter?: string;
+    mediaType?: 'image' | 'video';
   }) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
       return;
     }
 
+    setIsTopLoading(true);
     let newPostId = `post-${Date.now()}`;
+    const detectedMediaType = postData.mediaType || (postData.image?.startsWith('data:video/') ? 'video' : 'image');
 
     if (isFirebaseConfigured && db) {
       try {
@@ -430,6 +452,7 @@ export default function App() {
           likedBy: [],
           savedBy: [],
           comments: [],
+          mediaType: detectedMediaType,
         });
         newPostId = docRef.id;
       } catch (err) {
@@ -451,9 +474,11 @@ export default function App() {
       savedBy: [],
       comments: [],
       createdAt: Date.now(),
+      mediaType: detectedMediaType,
     };
 
     setPosts((prev) => [newPost, ...prev.filter((p) => p.id !== newPostId)]);
+    setIsTopLoading(false);
     setActiveTab('home');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -497,12 +522,14 @@ export default function App() {
   };
 
   const handleStorySeen = (storyId: string) => {
-    setStories((prev) =>
-      prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s))
-    );
+    setStories((prev) => {
+      const target = prev.find((s) => s.id === storyId);
+      if (target?.hasSeen) return prev;
+      return prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s));
+    });
   };
 
-  // Base64 ഉപയോഗിച്ച് സ്റ്റോറി അപ്‌ലോഡ് ചെയ്യുന്ന ഫങ്ഷൻ
+  // Video/Image story upload with top progress bar
   const handleAddUserStory = () => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -516,18 +543,21 @@ export default function App() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // Check file size (Firestore limit is 1MB per document)
-      if (file.size > 1048487) {
-        alert('ഫയർബേസ് സ്റ്റോറേജ് ഇല്ലാത്തതിനാൽ 1MB-യിൽ താഴെയുള്ള ഫയലുകൾ മാത്രമേ ഇപ്പോൾ സ്റ്റോറി ആയി അപ്‌ലോഡ് ചെയ്യാൻ സാധിക്കൂ.');
+      setIsTopLoading(true);
+
+      // Check file size (Firestore document limit)
+      if (file.size > 2097152) { // 2MB alert
+        setIsTopLoading(false);
+        alert('File size is too large for fast Firestore story sync. Please select a clip or photo under 2MB.');
         return;
       }
 
-      if (isFirebaseConfigured && db) {
-        try {
-          // Convert file to Base64
-          const base64DataUrl = await fileToBase64(file);
-          const isVideo = file.type.startsWith('video/');
+      const isVideo = file.type.startsWith('video/');
 
+      try {
+        const base64DataUrl = await fileToBase64(file);
+
+        if (isFirebaseConfigured && db) {
           await addDoc(collection(db, 'stories'), {
             uid: currentUser.uid,
             userId: currentUser.uid,
@@ -536,14 +566,31 @@ export default function App() {
             avatar: currentUser.photoURL,
             mediaUrl: base64DataUrl,
             caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
+            mediaType: isVideo ? 'video' : 'image',
             createdAt: serverTimestamp(),
           });
-        } catch (err) {
-          console.error('Story upload error:', err);
-          alert('അപ്‌ലോഡ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു. ദയവായി വീണ്ടും ശ്രമിക്കുക.');
+        } else {
+          // Local fallback
+          const localStory: Story = {
+            id: `story-${Date.now()}`,
+            uid: currentUser.uid,
+            userId: currentUser.uid,
+            authorId: currentUser.uid,
+            username: currentUser.username,
+            avatar: currentUser.photoURL,
+            mediaUrl: base64DataUrl,
+            caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
+            mediaType: isVideo ? 'video' : 'image',
+            timestamp: 'Just now',
+            hasSeen: false,
+          };
+          setStories((prev) => [localStory, ...prev]);
         }
-      } else {
-        alert('ഫയർബേസ് കോൺഫിഗർ ചെയ്തിട്ടില്ല.');
+      } catch (err) {
+        console.error('Story upload error:', err);
+        alert('Upload failed. Please try a smaller video or photo clip.');
+      } finally {
+        setIsTopLoading(false);
       }
     };
     input.click();
@@ -598,16 +645,20 @@ export default function App() {
       ambientVibe: data.ambientVibe,
       isLive: true,
       createdAt: Date.now(),
+      slotLikes: {},
     };
 
+    setIsTopLoading(true);
     setVoiceRooms((prev) => [newRoom, ...prev]);
     setActiveVoiceRoom(newRoom);
     setIsVoiceRoomModalOpen(true);
+    setTimeout(() => setIsTopLoading(false), 400);
 
     if (isFirebaseConfigured && db) {
       try {
         await addDoc(collection(db, 'voice_rooms'), {
           ...newRoom,
+          isDummy: false,
           createdAt: serverTimestamp(),
         });
       } catch (err) {
@@ -617,6 +668,7 @@ export default function App() {
   };
 
   const handleJoinVoiceRoom = (room: VoiceRoom) => {
+    setIsTopLoading(true);
     const userParticipant: RoomParticipant = currentUser
       ? {
           uid: currentUser.uid,
@@ -653,6 +705,7 @@ export default function App() {
     setActiveVoiceRoom(updatedRoom);
     setIsVoiceRoomModalOpen(true);
     setVoiceRooms((prev) => prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)));
+    setTimeout(() => setIsTopLoading(false), 300);
   };
 
   const handleLeaveVoiceRoom = () => {
@@ -671,6 +724,17 @@ export default function App() {
   const handleUpdateActiveRoom = (updated: VoiceRoom) => {
     setActiveVoiceRoom(updated);
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+
+    if (isFirebaseConfigured && db && updated.id) {
+      try {
+        const roomRef = doc(db, 'voice_rooms', updated.id);
+        updateDoc(roomRef, {
+          slotLikes: updated.slotLikes || {},
+          speakers: updated.speakers || [],
+          listeners: updated.listeners || [],
+        }).catch(() => {});
+      } catch {}
+    }
   };
 
   const handleTabChange = (tab: NavTab) => {
@@ -678,8 +742,10 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
+    setIsTopLoading(true);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => setIsTopLoading(false), 350);
   };
 
   const savedPosts = currentUser
@@ -688,6 +754,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black flex justify-center text-zinc-100 selection:bg-rose-500/30 selection:text-white">
+      {/* Animated Top Loading Progress Bar */}
+      <TopLoadingBar isLoading={isTopLoading || isLoadingPosts} />
+
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
         <Header
           currentUser={currentUser}
@@ -777,7 +846,7 @@ export default function App() {
           )}
 
           {activeTab === 'reels' && (
-            <ReelsView onGoToUpload={() => handleTabChange('upload')} />
+            <ReelsView onGoToUpload={() => handleTabChange('upload')} allPosts={posts} />
           )}
 
           {activeTab === 'profile' && (

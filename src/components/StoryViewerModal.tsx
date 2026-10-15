@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, Send, ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
+import { X, Heart, Send, ChevronLeft, ChevronRight, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Story, AppUser } from '../types';
 
 interface StoryViewerModalProps {
@@ -25,17 +25,19 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [isLiked, setIsLiked] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replySent, setReplySent] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
 
   const activeStory = stories[currentIndex];
+  const activeStoryId = activeStory?.id;
 
   useEffect(() => {
-    if (activeStory && onStorySeen) {
+    if (activeStory && !activeStory.hasSeen && onStorySeen) {
       onStorySeen(activeStory.id);
     }
     setProgress(0);
     setIsLiked(false);
     setReplySent(false);
-  }, [currentIndex, activeStory]);
+  }, [currentIndex, activeStoryId]);
 
   useEffect(() => {
     if (isPaused) return;
@@ -114,6 +116,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               src={activeStory.mediaUrl}
               autoPlay
               playsInline
+              muted={isMuted}
               className="w-full h-full object-contain"
               onEnded={handleNext}
             />
@@ -163,7 +166,18 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              {isVideo && (
+                <button
+                  onClick={() => setIsMuted(!isMuted)}
+                  className="p-1.5 rounded-full text-white/90 hover:text-white hover:bg-white/10 transition-colors"
+                  type="button"
+                  title={isMuted ? 'Unmute' : 'Mute'}
+                >
+                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5 text-emerald-400" />}
+                </button>
+              )}
+
               {canDelete && onDeleteStory && (
                 <button
                   onClick={() => {

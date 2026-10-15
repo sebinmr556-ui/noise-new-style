@@ -24,13 +24,13 @@ import {
 import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyAnGiJd-r37GEaWXY4LN3VDzOQuqamAedY",
-  authDomain: "noise-new-style.firebaseapp.com",
-  projectId: "noise-new-style",
-  storageBucket: "noise-new-style.firebasestorage.app",
-  messagingSenderId: "923676895487",
-  appId: "1:923676895487:web:8eeedeb4d4bdab6bf844ca",
-  measurementId: "G-445G2XCXCX"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAnGiJd-r37GEaWXY4LN3VDzOQuqamAedY",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "noise-new-style.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "noise-new-style",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "noise-new-style.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "923676895487",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:923676895487:web:8eeedeb4d4bdab6bf844ca",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-445G2XCXCX"
 };
 
 let app: any = null;

@@ -34,16 +34,21 @@ export interface Post {
   comments: CommentItem[];
   createdAt: number | any; // timestamp
   isLocalOnly?: boolean;
+  mediaType?: 'image' | 'video';
 }
 
 export interface Story {
   id: string;
+  uid?: string;
+  userId?: string;
+  authorId?: string;
   username: string;
   avatar: string;
   mediaUrl: string;
   caption?: string;
   timestamp: string;
   hasSeen?: boolean;
+  mediaType?: 'image' | 'video';
 }
 
 export interface Reel {
@@ -72,6 +77,8 @@ export interface RoomParticipant {
   isSpeaking?: boolean;
   hasRaisedHand?: boolean;
   joinedAt: number;
+  seatNumber?: number;
+  likesReceived?: number;
 }
 
 export interface RoomMessage {
@@ -81,6 +88,33 @@ export interface RoomMessage {
   avatar?: string;
   text: string;
   createdAt: number;
+}
+
+export interface PKBattle {
+  isActive: boolean;
+  teamRed: {
+    uid: string;
+    username: string;
+    displayName: string;
+    avatar?: string;
+    score: number;
+  };
+  teamBlue: {
+    uid: string;
+    username: string;
+    displayName: string;
+    avatar?: string;
+    score: number;
+  };
+  timeLeft: number; // in seconds
+  duration: number; // default 60s
+  winner?: 'red' | 'blue' | 'draw' | null;
+}
+
+export interface InteractiveGame {
+  type: 'wheel' | 'dice' | 'truthOrDare' | 'coinFlip';
+  isOpen: boolean;
+  result?: any;
 }
 
 export interface VoiceRoom {
@@ -98,4 +132,7 @@ export interface VoiceRoom {
   isLive: boolean;
   createdAt: number;
   activeSpeakerUid?: string;
+  slotLikes?: { [slotIndex: number]: number };
+  pkBattle?: PKBattle;
+  activeGame?: InteractiveGame;
 }

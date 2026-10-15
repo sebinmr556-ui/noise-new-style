@@ -11,7 +11,10 @@ import {
   Sun, 
   Contrast, 
   Droplet,
-  Eye
+  Eye,
+  Volume2,
+  VolumeX,
+  Video
 } from 'lucide-react';
 import { AppUser } from '../types';
 
@@ -22,6 +25,7 @@ interface UploadViewProps {
     caption: string;
     location?: string;
     filter?: string;
+    mediaType?: 'image' | 'video';
   }) => Promise<void>;
   onCancel: () => void;
   onRequireLogin: () => void;
@@ -117,16 +121,34 @@ export const UploadView: React.FC<UploadViewProps> = ({
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const loadedImageRef = useRef<HTMLImageElement | null>(null);
 
+  const [mediaType, setMediaType] = useState<'image' | 'video'>('image');
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
+  const videoPreviewRef = useRef<HTMLVideoElement | null>(null);
+
   const getFilterString = (adj: FilterAdjustments) => {
     return `brightness(${adj.brightness}%) grayscale(${adj.grayscale}%) sepia(${adj.sepia}%) contrast(${adj.contrast}%) saturate(${adj.saturation}%)`;
   };
 
-  const handleImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+  const handleMediaFile = (file: File) => {
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      alert('Please select an image or video file');
       return;
     }
 
+    if (file.type.startsWith('video/')) {
+      setMediaType('video');
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const videoDataUrl = event.target?.result as string;
+        setRawImageSrc(videoDataUrl);
+      };
+      reader.readAsDataURL(file);
+      setAdjustments(DEFAULT_ADJUSTMENTS);
+      setSelectedPreset('normal');
+      return;
+    }
+
+    setMediaType('image');
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -227,13 +249,13 @@ export const UploadView: React.FC<UploadViewProps> = ({
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) handleImageFile(file);
+    if (file) handleMediaFile(file);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files?.[0];
-    if (file) handleImageFile(file);
+    if (file) handleMediaFile(file);
   };
 
   const handleSubmit = async () => {
@@ -242,7 +264,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
       return;
     }
     if (!rawImageSrc) {
-      alert('Please select a photo first');
+      alert('Please select a photo or video first');
       return;
     }
 
@@ -251,15 +273,18 @@ export const UploadView: React.FC<UploadViewProps> = ({
 
     try {
       setProgress(45);
-      const bakedImage = bakeFinalImage();
-      if (!bakedImage) throw new Error('Failed to process image filters');
+      let finalMedia = rawImageSrc;
+      if (mediaType === 'image') {
+        finalMedia = bakeFinalImage() || rawImageSrc;
+      }
 
       setProgress(70);
       await onPostCreated({
-        image: bakedImage,
+        image: finalMedia,
         caption: caption.trim(),
         location: location.trim(),
         filter: selectedPreset,
+        mediaType,
       });
 
       setProgress(100);
@@ -283,7 +308,9 @@ export const UploadView: React.FC<UploadViewProps> = ({
         >
           Cancel
         </button>
-        <h2 className="text-sm font-bold text-white">Create new post</h2>
+        <h2 className="text-sm font-bold text-white">
+          {mediaType === 'video' ? 'Create new video post' : 'Create new post'}
+        </h2>
         <button
           onClick={handleSubmit}
           disabled={!rawImageSrc || isUploading}
@@ -295,7 +322,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
       </div>
 
       <div className="p-4 max-w-md mx-auto space-y-4">
-        {/* Upload Dropzone or Filter Canvas Preview */}
+        {/* Upload Dropzone or Filter Canvas/Video Preview */}
         {!rawImageSrc ? (
           <div
             onDragOver={(e) => e.preventDefault()}
@@ -306,27 +333,56 @@ export const UploadView: React.FC<UploadViewProps> = ({
             <div className="w-16 h-16 rounded-full bg-zinc-900 text-rose-400 flex items-center justify-center mb-3 ring-1 ring-zinc-800">
               <Upload className="w-8 h-8 stroke-[1.8]" />
             </div>
-            <p className="text-sm font-semibold text-zinc-200">Select photo from device</p>
-            <p className="text-xs text-zinc-500 mt-1">Drag and drop or tap to choose</p>
-            <span className="mt-4 text-xs font-semibold px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl hover:opacity-90 transition-opacity">
-              Choose Photo
-            </span>
+            <p className="text-sm font-semibold text-zinc-200">Select photo or video from device</p>
+            <p className="text-xs text-zinc-500 mt-1">Drag and drop or tap to choose (MP4, MOV, JPG, PNG)</p>
+            <div className="flex items-center gap-2 mt-4">
+              <span className="text-xs font-semibold px-4 py-2 bg-gradient-to-r from-rose-500 to-purple-600 text-white rounded-xl hover:opacity-90 transition-opacity">
+                Choose Photo or Video
+              </span>
+            </div>
           </div>
         ) : (
           <div className="space-y-3">
-            {/* Live Filter Canvas Preview */}
+            {/* Live Filter Media Preview */}
             <div className="relative aspect-square rounded-2xl overflow-hidden bg-black shadow-xl ring-1 ring-zinc-800 flex items-center justify-center">
-              <canvas
-                ref={previewCanvasRef}
-                className="w-full h-full object-cover"
-              />
+              {mediaType === 'video' ? (
+                <div className="relative w-full h-full flex items-center justify-center bg-black">
+                  <video
+                    ref={videoPreviewRef}
+                    src={rawImageSrc}
+                    autoPlay
+                    loop
+                    playsInline
+                    muted={isVideoMuted}
+                    style={{ filter: getFilterString(adjustments) }}
+                    className="w-full h-full object-contain"
+                  />
+                  <div className="absolute top-2.5 left-2.5 bg-black/70 backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] text-white flex items-center gap-1.5 border border-white/10">
+                    <Video className="w-3 h-3 text-rose-500" />
+                    <span>Video Post</span>
+                  </div>
+                  <button
+                    onClick={() => setIsVideoMuted(!isVideoMuted)}
+                    className="absolute bottom-2.5 right-2.5 p-2 bg-black/70 hover:bg-black text-white rounded-full transition-colors z-10"
+                    type="button"
+                    title={isVideoMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isVideoMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              ) : (
+                <canvas
+                  ref={previewCanvasRef}
+                  className="w-full h-full object-cover"
+                />
+              )}
               <button
                 onClick={() => {
                   setRawImageSrc(null);
                   loadedImageRef.current = null;
                 }}
                 className="absolute top-2.5 right-2.5 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition-colors z-10"
-                title="Change photo"
+                title="Change media"
                 type="button"
               >
                 <X className="w-4 h-4" />
@@ -536,7 +592,7 @@ export const UploadView: React.FC<UploadViewProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/*,video/*"
           onChange={handleFileInputChange}
           className="hidden"
         />

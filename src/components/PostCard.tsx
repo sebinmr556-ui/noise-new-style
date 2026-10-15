@@ -8,7 +8,11 @@ import {
   Trash2, 
   Link as LinkIcon, 
   Check,
-  User
+  User,
+  Volume2,
+  VolumeX,
+  Play,
+  Video
 } from 'lucide-react';
 import { Post, AppUser } from '../types';
 
@@ -39,6 +43,32 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [showMenu, setShowMenu] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [heartPulse, setHeartPulse] = useState(false);
+  const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(true);
+  const [showPlayIcon, setShowPlayIcon] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const isVideo =
+    post.mediaType === 'video' ||
+    post.image?.startsWith('data:video/') ||
+    post.image?.includes('.mp4') ||
+    post.image?.includes('.webm') ||
+    post.image?.includes('.mov') ||
+    post.caption?.includes('🎥');
+
+  const handleMediaClick = (e: React.MouseEvent) => {
+    if (isVideo && videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(() => {});
+        setIsVideoPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsVideoPlaying(false);
+      }
+      setShowPlayIcon(true);
+      setTimeout(() => setShowPlayIcon(false), 700);
+    }
+  };
 
   // Ref to track touch timestamps for mobile double-tap detection
   const lastTapRef = useRef<number>(0);
@@ -226,18 +256,60 @@ export const PostCard: React.FC<PostCardProps> = ({
         </div>
       </div>
 
-      {/* Main Image with Double Tap Heart Trigger */}
+      {/* Main Image / Video with Double Tap Heart Trigger */}
       <div 
         className="relative w-full aspect-square bg-black overflow-hidden flex items-center justify-center cursor-pointer select-none"
+        onClick={handleMediaClick}
         onDoubleClick={handleDoubleClick}
         onTouchEnd={handleTouchEnd}
       >
-        <img
-          src={post.image}
-          alt={post.caption || 'Post image'}
-          className="w-full h-full object-cover select-none pointer-events-none"
-          loading="lazy"
-        />
+        {isVideo ? (
+          <>
+            <video
+              ref={videoRef}
+              src={post.image}
+              autoPlay
+              loop
+              playsInline
+              muted={isVideoMuted}
+              className="w-full h-full object-cover select-none pointer-events-none"
+            />
+            {/* Video Indicator Badge */}
+            <div className="absolute top-2.5 left-2.5 bg-black/60 backdrop-blur-md px-2 py-0.5 rounded-full text-[10px] text-white flex items-center gap-1 border border-white/10 pointer-events-none z-10">
+              <Video className="w-3 h-3 text-rose-500" />
+              <span>Video</span>
+            </div>
+
+            {/* Mute / Unmute Button */}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsVideoMuted(!isVideoMuted);
+              }}
+              className="absolute bottom-2.5 right-2.5 p-2 bg-black/75 hover:bg-black text-white rounded-full transition-colors z-20 shadow-md border border-white/10"
+              title={isVideoMuted ? 'Unmute' : 'Mute'}
+            >
+              {isVideoMuted ? <VolumeX className="w-4 h-4 text-zinc-300" /> : <Volume2 className="w-4 h-4 text-emerald-400" />}
+            </button>
+
+            {/* Play / Pause Flash Overlay */}
+            {showPlayIcon && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20 animate-fadeIn">
+                <div className="p-3.5 bg-black/60 rounded-full backdrop-blur-sm text-white">
+                  {isVideoPlaying ? <Play className="w-7 h-7 fill-white" /> : <Play className="w-7 h-7 opacity-40" />}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <img
+            src={post.image}
+            alt={post.caption || 'Post image'}
+            className="w-full h-full object-cover select-none pointer-events-none"
+            loading="lazy"
+          />
+        )}
 
         {/* Double-Tap Heart Visual Feedback Animation */}
         {showHeartAnim && (
