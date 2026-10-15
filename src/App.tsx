@@ -823,11 +823,13 @@ export default function App() {
         {/* Story Viewer Modal */}
         {activeStoryIndex !== null && stories[activeStoryIndex] && (
           <StoryViewerModal
-            stories={stories}
-            initialIndex={activeStoryIndex}
-            onClose={() => setActiveStoryIndex(null)}
-            onStorySeen={handleStorySeen}
-          />
+  stories={stories}
+  initialIndex={activeStoryIndex}
+  currentUser={currentUser}
+  onClose={() => setActiveStoryIndex(null)}
+  onStorySeen={handleStorySeen}
+  onDeleteStory={handleDeleteStory}
+/>
         )}
 
         {/* Comments Modal Sheet */}
