@@ -40,6 +40,16 @@ import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { Loader2 } from 'lucide-react';
 
+// ഫയലുകളെ Base64 ആക്കി മാറ്റുന്നതിനുള്ള ഫങ്ഷൻ
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<NavTab>('home');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
@@ -492,7 +502,7 @@ export default function App() {
     );
   };
 
-  // Firebase Storage വഴി ഫോട്ടോയും വീഡിയോയും സ്റ്റോറിയായി അപ്‌ലോഡ് ചെയ്യുന്ന ഫങ്ഷൻ
+  // Base64 ഉപയോഗിച്ച് സ്റ്റോറി അപ്‌ലോഡ് ചെയ്യുന്ന ഫങ്ഷൻ
   const handleAddUserStory = () => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -506,12 +516,16 @@ export default function App() {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      if (isFirebaseConfigured && db && storage) {
-        try {
-          const storageRef = ref(storage, `stories/${currentUser.uid}_${Date.now()}_${file.name}`);
-          const snapshot = await uploadBytes(storageRef, file);
-          const downloadUrl = await getDownloadURL(snapshot.ref);
+      // Check file size (Firestore limit is 1MB per document)
+      if (file.size > 1048487) {
+        alert('ഫയർബേസ് സ്റ്റോറേജ് ഇല്ലാത്തതിനാൽ 1MB-യിൽ താഴെയുള്ള ഫയലുകൾ മാത്രമേ ഇപ്പോൾ സ്റ്റോറി ആയി അപ്‌ലോഡ് ചെയ്യാൻ സാധിക്കൂ.');
+        return;
+      }
 
+      if (isFirebaseConfigured && db) {
+        try {
+          // Convert file to Base64
+          const base64DataUrl = await fileToBase64(file);
           const isVideo = file.type.startsWith('video/');
 
           await addDoc(collection(db, 'stories'), {
@@ -520,7 +534,7 @@ export default function App() {
             authorId: currentUser.uid,
             username: currentUser.username,
             avatar: currentUser.photoURL,
-            mediaUrl: downloadUrl,
+            mediaUrl: base64DataUrl,
             caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
             createdAt: serverTimestamp(),
           });
@@ -529,13 +543,12 @@ export default function App() {
           alert('അപ്‌ലോഡ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു. ദയവായി വീണ്ടും ശ്രമിക്കുക.');
         }
       } else {
-        alert('ഫയർബേസ് സ്റ്റോറേജ് കോൺഫിഗർ ചെയ്തിട്ടില്ല.');
+        alert('ഫയർബേസ് കോൺഫിഗർ ചെയ്തിട്ടില്ല.');
       }
     };
     input.click();
   };
 
-  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ
   const handleDeleteStory = async (storyId: string) => {
     if (isFirebaseConfigured && db) {
       try {
