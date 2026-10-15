@@ -21,6 +21,7 @@ import {
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant } from './types';
+import { INITIAL_VOICE_ROOMS } from './data/mockData';
 import { isGlobalAdmin } from './utils/admin';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
@@ -101,7 +102,7 @@ export default function App() {
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
 
-  // Voice Chatrooms State (filtered to strictly user-created rooms)
+  // Voice Chatrooms State (filtered to only user-created rooms)
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
@@ -239,7 +240,7 @@ export default function App() {
           const data = docSnap.data();
           const docId = docSnap.id;
 
-          // Strict filtering to completely remove any dummy or mock chat rooms
+          // Filter out dummy/mock chat rooms in Firestore fetch logic
           const isDummy =
             data.isDummy === true ||
             docId.startsWith('room-1') ||
@@ -279,6 +280,7 @@ export default function App() {
           }
         });
 
+        // Set strictly user-created rooms
         setVoiceRooms(firestoreRooms);
       },
       (error) => {
@@ -582,6 +584,7 @@ export default function App() {
     });
   };
 
+  // Video/Image story upload with top progress bar
   const handleAddUserStory = () => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -597,7 +600,8 @@ export default function App() {
 
       setIsTopLoading(true);
 
-      if (file.size > 2097152) {
+      // Check file size (Firestore document limit)
+      if (file.size > 2097152) { // 2MB alert
         setIsTopLoading(false);
         alert('File size is too large for fast Firestore story sync. Please select a clip or photo under 2MB.');
         return;
@@ -621,6 +625,7 @@ export default function App() {
             createdAt: serverTimestamp(),
           });
         } else {
+          // Local fallback
           const localStory: Story = {
             id: `story-${Date.now()}`,
             uid: currentUser.uid,
@@ -825,6 +830,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black flex justify-center text-zinc-100 selection:bg-rose-500/30 selection:text-white">
+      {/* Animated Top Loading Progress Bar */}
       <TopLoadingBar isLoading={isTopLoading || isLoadingPosts} />
 
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
