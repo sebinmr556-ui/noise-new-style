@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, Search, Radio, Plus, Users, Mic, Music, Hash } from 'lucide-react';
+import { X, Search, Radio, Plus, Users, Mic, Music, Hash, Trash2 } from 'lucide-react';
 import { VoiceRoom, AppUser } from '../types';
+import { isGlobalAdmin } from '../utils/admin';
 
 interface VoiceRoomsListModalProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface VoiceRoomsListModalProps {
   currentUser: AppUser | null;
   onJoinRoom: (room: VoiceRoom) => void;
   onOpenCreateRoom: () => void;
+  onDeleteRoom?: (roomId: string) => void;
 }
 
 const CATEGORIES = ['All', 'Chill & Lo-Fi', 'Casual Hangout', 'Photography & Art', 'Creators & Tech', 'Late Night Lounge'];
@@ -20,9 +22,11 @@ export const VoiceRoomsListModal: React.FC<VoiceRoomsListModalProps> = ({
   currentUser,
   onJoinRoom,
   onOpenCreateRoom,
+  onDeleteRoom,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [roomToDelete, setRoomToDelete] = useState<VoiceRoom | null>(null);
 
   if (!isOpen) return null;
 
@@ -171,12 +175,27 @@ export const VoiceRoomsListModal: React.FC<VoiceRoomsListModalProps> = ({
                       </p>
                     </div>
 
-                    <button
-                      className="flex-none px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 group-hover:bg-rose-500 group-hover:text-white transition-all shadow-xs"
-                      type="button"
-                    >
-                      Join
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-none">
+                      {onDeleteRoom && (isGlobalAdmin(currentUser) || room.hostUid === currentUser?.uid) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setRoomToDelete(room);
+                          }}
+                          className="p-1.5 rounded-xl text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                          title={isGlobalAdmin(currentUser) && room.hostUid !== currentUser?.uid ? 'Delete Room (Master Admin 👑)' : 'Delete Room'}
+                          type="button"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 group-hover:bg-rose-500 group-hover:text-white transition-all shadow-xs"
+                        type="button"
+                      >
+                        Join
+                      </button>
+                    </div>
                   </div>
 
                   {/* Tags */}
@@ -225,6 +244,47 @@ export const VoiceRoomsListModal: React.FC<VoiceRoomsListModalProps> = ({
             })
           )}
         </div>
+
+        {/* Room Delete Confirmation Dialog */}
+        {roomToDelete && (
+          <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-center max-w-xs w-full shadow-2xl">
+              <div className="w-11 h-11 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto mb-3 text-rose-500">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1">
+                {isGlobalAdmin(currentUser) && roomToDelete.hostUid !== currentUser?.uid
+                  ? 'Admin: Delete Room?'
+                  : 'Delete Voice Room?'}
+              </h3>
+              <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
+                {isGlobalAdmin(currentUser) && roomToDelete.hostUid !== currentUser?.uid
+                  ? `Master Admin 👑 action: Delete "${roomToDelete.title}" by @${roomToDelete.hostUsername}? All participants will be disconnected.`
+                  : `Are you sure you want to delete your voice room "${roomToDelete.title}"?`}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRoomToDelete(null)}
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = roomToDelete.id;
+                    setRoomToDelete(null);
+                    if (onDeleteRoom) onDeleteRoom(id);
+                  }}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow-lg"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

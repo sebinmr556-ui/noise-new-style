@@ -8,6 +8,9 @@ import {
   fbSignOut,
   collection, 
   addDoc, 
+  getDoc,
+  setDoc,
+  arrayUnion,
   query, 
   orderBy, 
   serverTimestamp,
@@ -19,6 +22,7 @@ import {
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant } from './types';
 import { INITIAL_VOICE_ROOMS } from './data/mockData';
+import { isGlobalAdmin } from './utils/admin';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
@@ -122,8 +126,23 @@ export default function App() {
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) return;
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        let firestoreBlockedUsers: string[] = [];
+        if (db) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', user.uid));
+            if (userSnap.exists()) {
+              const uData = userSnap.data();
+              if (Array.isArray(uData.blockedUsers)) {
+                firestoreBlockedUsers = uData.blockedUsers;
+              }
+            }
+          } catch (e) {
+            console.debug('Error reading user profile:', e);
+          }
+        }
+
         setCurrentUser((prev) => ({
           uid: user.uid,
           displayName: user.displayName || prev?.displayName || 'User',
@@ -131,6 +150,7 @@ export default function App() {
             .toLowerCase()
             .replace(/[^a-z0-9_]/g, '_')
             .slice(0, 15),
+          email: user.email || prev?.email || undefined,
           photoURL:
             user.photoURL ||
             (prev?.photoURL && !prev.photoURL.includes('unsplash.com') && !prev.photoURL.includes('ui-avatars.com')
@@ -138,6 +158,7 @@ export default function App() {
               : ''),
           followersCount: prev?.followersCount || 0,
           followingCount: prev?.followingCount || 0,
+          blockedUsers: Array.from(new Set([...(prev?.blockedUsers || []), ...firestoreBlockedUsers])),
         }));
       }
     });
@@ -484,15 +505,49 @@ export default function App() {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!confirm('Are you sure you want to delete this post?')) return;
-
     setPosts((prev) => prev.filter((p) => p.id !== postId));
+    if (selectedDetailPost?.id === postId) {
+      setSelectedDetailPost(null);
+    }
 
     if (isFirebaseConfigured && db) {
       try {
         await deleteDoc(doc(db, 'posts', postId));
       } catch (e) {
-        console.warn(e);
+        console.warn('Firestore delete post warning:', e);
+      }
+    }
+  };
+
+  const handleBlockUser = async (targetUserId: string) => {
+    if (!currentUser || !targetUserId) return;
+    const currentBlocked = currentUser.blockedUsers || [];
+    if (currentBlocked.includes(targetUserId)) return;
+
+    const newBlocked = [...currentBlocked, targetUserId];
+    const updatedUser: AppUser = {
+      ...currentUser,
+      blockedUsers: newBlocked,
+    };
+    setCurrentUser(updatedUser);
+
+    try {
+      localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
+    } catch {}
+
+    if (isFirebaseConfigured && db && currentUser.uid) {
+      try {
+        const userRef = doc(db, 'users', currentUser.uid);
+        await setDoc(
+          userRef,
+          {
+            blockedUsers: arrayUnion(targetUserId),
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.warn('Firestore block user sync warning:', err);
       }
     }
   };
@@ -721,6 +776,21 @@ export default function App() {
     setIsVoiceRoomModalOpen(false);
   };
 
+  const handleDeleteVoiceRoom = async (roomId: string) => {
+    setVoiceRooms((prev) => prev.filter((r) => r.id !== roomId));
+    if (activeVoiceRoom?.id === roomId) {
+      setActiveVoiceRoom(null);
+      setIsVoiceRoomModalOpen(false);
+    }
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'voice_rooms', roomId));
+      } catch (e) {
+        console.warn('Firestore delete voice room warning:', e);
+      }
+    }
+  };
+
   const handleUpdateActiveRoom = (updated: VoiceRoom) => {
     setActiveVoiceRoom(updated);
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
@@ -748,8 +818,14 @@ export default function App() {
     setTimeout(() => setIsTopLoading(false), 350);
   };
 
+  const blockedUids = currentUser?.blockedUsers || [];
+  const visiblePosts = posts.filter((p) => !blockedUids.includes(p.uid));
+  const visibleStories = stories.filter(
+    (s) => !blockedUids.includes(s.uid || s.userId || s.authorId || '')
+  );
+
   const savedPosts = currentUser
-    ? posts.filter((p) => p.savedBy?.includes(currentUser.uid))
+    ? visiblePosts.filter((p) => p.savedBy?.includes(currentUser.uid))
     : [];
 
   return (
@@ -771,7 +847,7 @@ export default function App() {
           {activeTab === 'home' && (
             <div>
               <StoriesBar
-                stories={stories}
+                stories={visibleStories}
                 currentUser={currentUser}
                 onOpenStory={(index) => setActiveStoryIndex(index)}
                 onAddStory={handleAddUserStory}
@@ -797,7 +873,7 @@ export default function App() {
                     <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
                     <span className="text-xs">Connecting to Noise...</span>
                   </div>
-                ) : posts.length === 0 ? (
+                ) : visiblePosts.length === 0 ? (
                   <div className="text-center py-24 px-4 text-zinc-400">
                     <p className="text-base font-bold text-white">No posts yet</p>
                     <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
@@ -811,7 +887,7 @@ export default function App() {
                     </button>
                   </div>
                 ) : (
-                  posts.map((post) => (
+                  visiblePosts.map((post) => (
                     <PostCard
                       key={post.id}
                       post={post}
@@ -821,6 +897,7 @@ export default function App() {
                       onOpenComments={(p) => setActiveCommentPost(p)}
                       onQuickComment={handleAddComment}
                       onDeletePost={handleDeletePost}
+                      onBlockUser={handleBlockUser}
                       onRequireLogin={() => setIsLoginModalOpen(true)}
                     />
                   ))
@@ -831,7 +908,7 @@ export default function App() {
 
           {activeTab === 'search' && (
             <ExploreView
-              allPosts={posts}
+              allPosts={visiblePosts}
               onSelectPost={(post) => setSelectedDetailPost(post)}
             />
           )}
@@ -846,7 +923,7 @@ export default function App() {
           )}
 
           {activeTab === 'reels' && (
-            <ReelsView onGoToUpload={() => handleTabChange('upload')} allPosts={posts} />
+            <ReelsView onGoToUpload={() => handleTabChange('upload')} allPosts={visiblePosts} />
           )}
 
           {activeTab === 'profile' && (
@@ -870,9 +947,9 @@ export default function App() {
           currentUser={currentUser}
         />
 
-        {activeStoryIndex !== null && stories[activeStoryIndex] && (
+        {activeStoryIndex !== null && visibleStories[activeStoryIndex] && (
           <StoryViewerModal
-            stories={stories}
+            stories={visibleStories}
             initialIndex={activeStoryIndex}
             currentUser={currentUser}
             onClose={() => setActiveStoryIndex(null)}
@@ -901,6 +978,7 @@ export default function App() {
             onOpenComments={(p) => setActiveCommentPost(p)}
             onQuickComment={handleAddComment}
             onDeletePost={handleDeletePost}
+            onBlockUser={handleBlockUser}
             onRequireLogin={() => setIsLoginModalOpen(true)}
           />
         )}
@@ -942,6 +1020,7 @@ export default function App() {
             onMinimize={() => setIsVoiceRoomModalOpen(false)}
             onLeaveRoom={handleLeaveVoiceRoom}
             onUpdateRoom={handleUpdateActiveRoom}
+            onDeleteRoom={handleDeleteVoiceRoom}
             onRequireLogin={() => setIsLoginModalOpen(true)}
           />
         )}
@@ -966,6 +1045,7 @@ export default function App() {
             }
             setIsCreateVoiceRoomOpen(true);
           }}
+          onDeleteRoom={handleDeleteVoiceRoom}
         />
       </div>
     </div>

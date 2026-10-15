@@ -12,9 +12,15 @@ import {
   Volume2,
   VolumeX,
   Play,
-  Video
+  Video,
+  Flag,
+  AlertCircle,
+  X,
+  UserX,
+  ShieldCheck
 } from 'lucide-react';
 import { Post, AppUser } from '../types';
+import { isGlobalAdmin } from '../utils/admin';
 
 interface PostCardProps {
   post: Post;
@@ -24,6 +30,7 @@ interface PostCardProps {
   onOpenComments: (post: Post) => void;
   onQuickComment: (postId: string, text: string) => void;
   onDeletePost?: (postId: string) => void;
+  onBlockUser?: (userId: string) => void;
   onRequireLogin: () => void;
 }
 
@@ -35,6 +42,7 @@ export const PostCard: React.FC<PostCardProps> = ({
   onOpenComments,
   onQuickComment,
   onDeletePost,
+  onBlockUser,
   onRequireLogin,
 }) => {
   const [inlineComment, setInlineComment] = useState('');
@@ -47,6 +55,24 @@ export const PostCard: React.FC<PostCardProps> = ({
   const [isVideoPlaying, setIsVideoPlaying] = useState(true);
   const [showPlayIcon, setShowPlayIcon] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [selectedReportReason, setSelectedReportReason] = useState<string | null>(null);
+  const [isReportSubmitted, setIsReportSubmitted] = useState(false);
+  const [isPostHidden, setIsPostHidden] = useState(false);
+  const [hiddenReason, setHiddenReason] = useState<'report' | 'block'>('report');
+  const [showBlockConfirmModal, setShowBlockConfirmModal] = useState(false);
+  const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false);
+
+  const REPORT_REASONS = [
+    "It's spam or scam",
+    "Nudity or sexual activity",
+    "Hate speech or symbols",
+    "Violence or dangerous content",
+    "Bullying or harassment",
+    "False information or misleading",
+    "I simply don't want to see this",
+  ];
 
   const isVideo =
     post.mediaType === 'video' ||
@@ -77,6 +103,8 @@ export const PostCard: React.FC<PostCardProps> = ({
   const isLiked = currentUser ? post.likedBy?.includes(currentUser.uid) : false;
   const isSaved = currentUser ? post.savedBy?.includes(currentUser.uid) : false;
   const isOwner = currentUser && (post.uid === currentUser.uid || currentUser.username === post.username);
+  const isAdmin = isGlobalAdmin(currentUser);
+  const canDelete = isOwner || isAdmin;
 
   // Trigger double-tap heart animation & like action
   const triggerDoubleTap = () => {
@@ -180,6 +208,40 @@ export const PostCard: React.FC<PostCardProps> = ({
     return 'recently';
   };
 
+  if (isPostHidden) {
+    return (
+      <article className="bg-zinc-950 border-b border-zinc-800/80 mb-3 sm:rounded-2xl sm:border sm:border-zinc-800 sm:bg-zinc-900/40 p-5 text-center transition-all animate-fadeIn">
+        {hiddenReason === 'block' ? (
+          <>
+            <div className="w-10 h-10 rounded-full bg-orange-500/10 border border-orange-500/30 flex items-center justify-center mx-auto mb-2 text-orange-400">
+              <UserX className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-white mb-0.5">User Blocked</h4>
+            <p className="text-[11px] text-zinc-400 max-w-xs mx-auto mb-1">
+              You have blocked @{post.username}. All their posts and content will be hidden from your feed.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-2 text-amber-400">
+              <Flag className="w-5 h-5" />
+            </div>
+            <h4 className="text-xs font-bold text-white mb-0.5">Post Reported</h4>
+            <p className="text-[11px] text-zinc-400 max-w-xs mx-auto mb-2.5">
+              Thank you for reporting. We've hidden this post from your feed.
+            </p>
+            <button
+              onClick={() => setIsPostHidden(false)}
+              className="text-[11px] font-semibold text-zinc-400 hover:text-white underline cursor-pointer"
+            >
+              Show post anyway
+            </button>
+          </>
+        )}
+      </article>
+    );
+  }
+
   return (
     <article className="bg-zinc-950 border-b border-zinc-800/80 mb-3 sm:rounded-2xl sm:border sm:border-zinc-800 sm:bg-zinc-900/40 transition-shadow">
       {/* Header */}
@@ -238,17 +300,47 @@ export const PostCard: React.FC<PostCardProps> = ({
                 <span>{copiedLink ? 'Copied link!' : 'Copy link'}</span>
               </button>
 
-              {isOwner && onDeletePost && (
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  setShowReportModal(true);
+                  setIsReportSubmitted(false);
+                  setSelectedReportReason(null);
+                }}
+                className="w-full px-3 py-2 text-left flex items-center gap-2 text-amber-400 hover:bg-zinc-800 transition-colors"
+                type="button"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                <span>Report post</span>
+              </button>
+
+              {/* Block User Button */}
+              {currentUser && post.uid !== currentUser.uid && onBlockUser && (
                 <button
                   onClick={() => {
                     setShowMenu(false);
-                    onDeletePost(post.id);
+                    setShowBlockConfirmModal(true);
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 text-orange-400 hover:bg-zinc-800 transition-colors"
+                  type="button"
+                >
+                  <UserX className="w-3.5 h-3.5" />
+                  <span>Block @{post.username}</span>
+                </button>
+              )}
+
+              {/* Delete button: visible to admin on ANY post, but hidden from regular users unless viewing their own post */}
+              {canDelete && onDeletePost && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowDeleteConfirmModal(true);
                   }}
                   className="w-full px-3 py-2 text-left flex items-center gap-2 text-rose-400 hover:bg-rose-950/30"
                   type="button"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete post</span>
+                  <span>{isAdmin && !isOwner ? 'Delete (Master Admin 👑)' : 'Delete post'}</span>
                 </button>
               )}
             </div>
@@ -438,6 +530,171 @@ export const PostCard: React.FC<PostCardProps> = ({
           </button>
         )}
       </form>
+
+      {/* Report Post Modal */}
+      {showReportModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-150">
+            <div className="p-3.5 border-b border-zinc-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Flag className="w-4 h-4 text-amber-400" />
+                <h3 className="text-sm font-bold text-white">Report Post</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowReportModal(false)}
+                className="p-1 rounded-full text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {isReportSubmitted ? (
+              <div className="p-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
+                  <Check className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-white">Report Received</h4>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  Thank you for reporting this content. Our moderation team will review this post to ensure community safety.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowReportModal(false);
+                    setIsPostHidden(true);
+                  }}
+                  className="w-full py-2 bg-gradient-to-r from-rose-500 to-indigo-600 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity"
+                >
+                  Done & Hide Post
+                </button>
+              </div>
+            ) : (
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-zinc-300 font-semibold">
+                  Why are you reporting this post from @{post.username}?
+                </p>
+                <div className="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-1">
+                  {REPORT_REASONS.map((reason) => (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => setSelectedReportReason(reason)}
+                      className={`w-full text-left px-3 py-2 rounded-xl text-xs transition-all flex items-center justify-between ${
+                        selectedReportReason === reason
+                          ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 font-bold'
+                          : 'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-800 border border-transparent'
+                      }`}
+                    >
+                      <span>{reason}</span>
+                      {selectedReportReason === reason && (
+                        <Check className="w-3.5 h-3.5 text-rose-400 flex-none ml-2" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(false)}
+                    className="flex-1 py-2 text-xs font-semibold text-zinc-400 hover:text-white bg-zinc-800 rounded-xl transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!selectedReportReason}
+                    onClick={() => setIsReportSubmitted(true)}
+                    className="flex-1 py-2 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-indigo-600 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                  >
+                    Submit Report
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Block User Confirmation Modal */}
+      {showBlockConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-center max-w-xs w-full shadow-2xl">
+            <div className="w-11 h-11 rounded-full bg-orange-500/15 border border-orange-500/30 flex items-center justify-center mx-auto mb-3 text-orange-400">
+              <UserX className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-white mb-1">
+              Block @{post.username}?
+            </h3>
+            <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
+              They will not be able to interact with you, and their posts and stories will be hidden from your feed.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBlockConfirmModal(false)}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBlockConfirmModal(false);
+                  if (onBlockUser) onBlockUser(post.uid);
+                  setHiddenReason('block');
+                  setIsPostHidden(true);
+                }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow-lg"
+              >
+                Block User
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Post Confirmation Modal */}
+      {showDeleteConfirmModal && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-center max-w-xs w-full shadow-2xl">
+            <div className="w-11 h-11 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto mb-3 text-rose-500">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-white mb-1">
+              {isAdmin && !isOwner ? 'Admin: Delete Post?' : 'Delete Post?'}
+            </h3>
+            <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
+              {isAdmin && !isOwner
+                ? `Master Admin 👑 action: Are you sure you want to delete @${post.username}'s post? This will permanently remove it from the platform.`
+                : 'Are you sure you want to delete your post? This cannot be undone.'}
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirmModal(false)}
+                className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowDeleteConfirmModal(false);
+                  if (onDeletePost) onDeletePost(post.id);
+                }}
+                className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow-lg"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </article>
   );
 };

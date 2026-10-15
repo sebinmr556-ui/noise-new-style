@@ -8,6 +8,7 @@ export interface AppUser {
   website?: string;
   followersCount: number;
   followingCount: number;
+  blockedUsers?: string[];
 }
 
 export interface CommentItem {

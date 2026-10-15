@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Heart, Send, ChevronLeft, ChevronRight, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { Story, AppUser } from '../types';
+import { isGlobalAdmin } from '../utils/admin';
 
 interface StoryViewerModalProps {
   stories: Story[];
@@ -26,17 +27,22 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   const [replyText, setReplyText] = useState('');
   const [replySent, setReplySent] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const activeStory = stories[currentIndex];
   const activeStoryId = activeStory?.id;
 
   useEffect(() => {
-    if (activeStory && !activeStory.hasSeen && onStorySeen) {
-      onStorySeen(activeStory.id);
-    }
     setProgress(0);
     setIsLiked(false);
     setReplySent(false);
+
+    if (activeStoryId && !activeStory?.hasSeen && onStorySeen) {
+      const timer = setTimeout(() => {
+        onStorySeen(activeStoryId);
+      }, 0);
+      return () => clearTimeout(timer);
+    }
   }, [currentIndex, activeStoryId]);
 
   useEffect(() => {
@@ -44,21 +50,24 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
 
     const interval = setInterval(() => {
       setProgress((prev) => {
-        if (prev >= 100) {
-          if (currentIndex < stories.length - 1) {
-            setCurrentIndex((curr) => curr + 1);
-            return 0;
-          } else {
-            onClose();
-            return 100;
-          }
-        }
+        if (prev >= 100) return 100;
         return prev + 2;
       });
     }, 100);
 
     return () => clearInterval(interval);
-  }, [currentIndex, isPaused, stories.length, onClose]);
+  }, [isPaused, currentIndex]);
+
+  useEffect(() => {
+    if (progress >= 100) {
+      if (currentIndex < stories.length - 1) {
+        setCurrentIndex((curr) => curr + 1);
+        setProgress(0);
+      } else {
+        onClose();
+      }
+    }
+  }, [progress, currentIndex, stories.length, onClose]);
 
   const handlePrev = () => {
     if (currentIndex > 0) {
@@ -90,7 +99,7 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
     activeStory.uid === currentUser.uid
   );
   
-  const isMasterAdmin = currentUser?.username === 'shoebell_shoe';
+  const isMasterAdmin = isGlobalAdmin(currentUser);
   const canDelete = isOwner || isMasterAdmin;
 
   const isVideo = 
@@ -181,16 +190,12 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
               {canDelete && onDeleteStory && (
                 <button
                   onClick={() => {
-                    setIsPaused(true); 
-                    if (window.confirm("ഈ സ്റ്റോറി ഡിലീറ്റ് ചെയ്യണോ?")) {
-                      onDeleteStory(activeStory.id);
-                      onClose();
-                    } else {
-                      setIsPaused(false);
-                    }
+                    setIsPaused(true);
+                    setShowDeleteConfirm(true);
                   }}
                   className="p-1.5 rounded-full text-white/90 hover:text-red-500 hover:bg-white/10 transition-colors"
                   type="button"
+                  title={isMasterAdmin && !isOwner ? "Delete Story (Master Admin 👑)" : "Delete Story"}
                 >
                   <Trash2 className="w-5 h-5" />
                 </button>
@@ -206,6 +211,48 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Delete Confirmation Modal Overlay */}
+        {showDeleteConfirm && (
+          <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-6 animate-fadeIn">
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-center max-w-xs w-full shadow-2xl">
+              <div className="w-11 h-11 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto mb-3 text-rose-500">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-sm font-bold text-white mb-1">
+                {isMasterAdmin && !isOwner ? 'Admin: Delete Story?' : 'Delete Story?'}
+              </h3>
+              <p className="text-xs text-zinc-400 mb-4 leading-relaxed">
+                {isMasterAdmin && !isOwner
+                  ? `Are you sure you want to delete @${activeStory.username}'s story? This cannot be undone.`
+                  : 'Are you sure you want to delete your story? This cannot be undone.'}
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setIsPaused(false);
+                  }}
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    if (onDeleteStory) onDeleteStory(activeStory.id);
+                    onClose();
+                  }}
+                  className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow-lg"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Tap areas to navigate */}
         <div className="absolute inset-y-16 inset-x-0 z-10 flex">

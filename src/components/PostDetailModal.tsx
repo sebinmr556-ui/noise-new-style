@@ -12,6 +12,7 @@ interface PostDetailModalProps {
   onOpenComments: (post: Post) => void;
   onQuickComment: (postId: string, text: string) => void;
   onDeletePost?: (postId: string) => void;
+  onBlockUser?: (userId: string) => void;
   onRequireLogin: () => void;
 }
 
@@ -24,6 +25,7 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
   onOpenComments,
   onQuickComment,
   onDeletePost,
+  onBlockUser,
   onRequireLogin,
 }) => {
   if (!post) return null;
@@ -49,6 +51,10 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
           onDeletePost={(id) => {
             if (onDeletePost) onDeletePost(id);
             onClose();
+          }}
+          onBlockUser={(userId) => {
+            if (onBlockUser) onBlockUser(userId);
+            setTimeout(() => onClose(), 600);
           }}
           onRequireLogin={onRequireLogin}
         />
