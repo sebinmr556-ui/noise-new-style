@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   auth, 
   db, 
+  storage,
   isFirebaseConfigured, 
   onAuthStateChanged, 
   fbSignOut,
@@ -15,6 +16,7 @@ import {
   deleteDoc,
   onSnapshot
 } from './firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant } from './types';
 import { INITIAL_VOICE_ROOMS } from './data/mockData';
 import { Header } from './components/Header';
@@ -46,7 +48,6 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed) {
-          // Clean up any legacy dummy photos
           if (
             typeof parsed.photoURL === 'string' &&
             (parsed.photoURL.includes('unsplash.com') || parsed.photoURL.includes('ui-avatars.com'))
@@ -62,13 +63,11 @@ export default function App() {
     }
   });
 
-  // Pure Firebase state - all demo samples removed
   const [posts, setPosts] = useState<Post[]>(() => {
     try {
       const local = localStorage.getItem('noise_cached_posts');
       if (local) {
         const parsed = JSON.parse(local);
-        // Exclude any legacy mock posts
         if (Array.isArray(parsed)) {
           return parsed.filter((p: any) => p && !p.id?.startsWith('post-1') && !p.id?.startsWith('post-2') && !p.id?.startsWith('post-3') && p.uid !== 'system-user-1');
         }
@@ -94,7 +93,6 @@ export default function App() {
   const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(false);
   const [isVoiceRoomsListOpen, setIsVoiceRoomsListOpen] = useState(false);
 
-  // Sync current user to localStorage
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('noise_current_user', JSON.stringify(currentUser));
@@ -103,14 +101,12 @@ export default function App() {
     }
   }, [currentUser]);
 
-  // Sync posts to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('noise_cached_posts', JSON.stringify(posts));
     } catch {}
   }, [posts]);
 
-  // Listen to Firebase Auth state
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) return;
 
@@ -137,14 +133,12 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Connect Firebase Firestore Real-Time Listeners for Posts & Stories
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setIsLoadingPosts(false);
       return;
     }
 
-    // 1. Posts Real-Time Listener
     const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
     const unsubscribePosts = onSnapshot(
       postsQuery,
@@ -177,7 +171,6 @@ export default function App() {
       }
     );
 
-    // 2. Stories Real-Time Listener
     const storiesQuery = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
     const unsubscribeStories = onSnapshot(
       storiesQuery,
@@ -187,6 +180,9 @@ export default function App() {
           const data = docSnap.data();
           firestoreStories.push({
             id: docSnap.id,
+            uid: data.uid || data.userId,
+            userId: data.userId || data.uid,
+            authorId: data.authorId || data.uid,
             username: data.username || 'user',
             avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
             mediaUrl: data.mediaUrl,
@@ -202,7 +198,6 @@ export default function App() {
       }
     );
 
-    // 3. Voice Rooms Real-Time Listener
     const roomsQuery = query(collection(db, 'voice_rooms'), orderBy('createdAt', 'desc'));
     const unsubscribeRooms = onSnapshot(
       roomsQuery,
@@ -250,7 +245,6 @@ export default function App() {
     };
   }, []);
 
-  // Handle Logout
   const handleSignOut = async () => {
     if (isFirebaseConfigured && auth) {
       try {
@@ -263,7 +257,6 @@ export default function App() {
     setActiveTab('home');
   };
 
-  // Toggle Like on Post
   const handleLikeToggle = async (postId: string) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -284,7 +277,6 @@ export default function App() {
             likedBy: newLikedBy,
           };
 
-          // Sync to Firestore
           if (isFirebaseConfigured && db) {
             try {
               const postRef = doc(db, 'posts', p.id);
@@ -302,7 +294,6 @@ export default function App() {
     );
   };
 
-  // Toggle Save on Post
   const handleSaveToggle = (postId: string) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -322,7 +313,6 @@ export default function App() {
             savedBy: newSavedBy,
           };
 
-          // Sync to Firestore
           if (isFirebaseConfigured && db) {
             try {
               const postRef = doc(db, 'posts', p.id);
@@ -339,7 +329,6 @@ export default function App() {
     );
   };
 
-  // Add Comment
   const handleAddComment = async (postId: string, text: string) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -365,7 +354,6 @@ export default function App() {
             setActiveCommentPost(updatedPost);
           }
 
-          // Sync to Firestore
           if (isFirebaseConfigured && db) {
             try {
               const postRef = doc(db, 'posts', p.id);
@@ -382,7 +370,6 @@ export default function App() {
     );
   };
 
-  // Delete Comment
   const handleDeleteComment = (postId: string, commentId: string) => {
     setPosts((prev) =>
       prev.map((p) => {
@@ -405,7 +392,6 @@ export default function App() {
     );
   };
 
-  // Create Post with Baked Filters to Firebase
   const handleCreatePost = async (postData: {
     image: string;
     caption: string;
@@ -419,13 +405,12 @@ export default function App() {
 
     let newPostId = `post-${Date.now()}`;
 
-    // Write to Firestore posts collection
     if (isFirebaseConfigured && db) {
       try {
         const docRef = await addDoc(collection(db, 'posts'), {
           username: currentUser.displayName || currentUser.username,
           avatar: currentUser.photoURL,
-          image: postData.image, // Processed image with filters baked in
+          image: postData.image,
           caption: postData.caption,
           location: postData.location || '',
           filter: postData.filter || 'normal',
@@ -463,7 +448,6 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Delete Post
   const handleDeletePost = async (postId: string) => {
     if (!confirm('Are you sure you want to delete this post?')) return;
 
@@ -478,7 +462,6 @@ export default function App() {
     }
   };
 
-  // Update Profile
   const handleUpdateProfile = (updates: {
     displayName: string;
     username: string;
@@ -493,26 +476,23 @@ export default function App() {
     setCurrentUser(updated);
   };
 
-  // Update Avatar
   const handleUpdateAvatar = (dataUrl: string) => {
     if (!currentUser) return;
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: dataUrl } : null));
   };
 
-  // Remove Avatar
   const handleRemoveAvatar = () => {
     if (!currentUser) return;
     setCurrentUser((prev) => (prev ? { ...prev, photoURL: '' } : null));
   };
 
-  // Mark Story as Seen
   const handleStorySeen = (storyId: string) => {
     setStories((prev) =>
       prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s))
     );
   };
 
-  // Add Real User Story to Firebase
+  // Firebase Storage വഴി ഫോട്ടോയും വീഡിയോയും സ്റ്റോറിയായി അപ്‌ലോഡ് ചെയ്യുന്ന ഫങ്ഷൻ
   const handleAddUserStory = () => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -520,53 +500,54 @@ export default function App() {
     }
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e: any) => {
+    input.accept = 'image/*,video/*';
+    
+    input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const raw = ev.target?.result as string;
-        const img = new Image();
-        img.onload = async () => {
-          const canvas = document.createElement('canvas');
-          const MAX = 800;
-          let w = img.width, h = img.height;
-          if (w > h) {
-            if (w > MAX) { h = Math.round((h * MAX) / w); w = MAX; }
-          } else {
-            if (h > MAX) { w = Math.round((h * MAX) / h); h = MAX; }
-          }
-          canvas.width = w; canvas.height = h;
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            ctx.drawImage(img, 0, 0, w, h);
-            const mediaUrl = canvas.toDataURL('image/jpeg', 0.85);
 
-            if (isFirebaseConfigured && db) {
-              try {
-                await addDoc(collection(db, 'stories'), {
-                  uid: currentUser.uid,
-                  username: currentUser.username,
-                  avatar: currentUser.photoURL,
-                  mediaUrl: mediaUrl,
-                  caption: 'My moment ✨',
-                  createdAt: serverTimestamp(),
-                });
-              } catch (err) {
-                console.warn('Story save error:', err);
-              }
-            }
-          }
-        };
-        img.src = raw;
-      };
-      reader.readAsDataURL(file);
+      if (isFirebaseConfigured && db && storage) {
+        try {
+          const storageRef = ref(storage, `stories/${currentUser.uid}_${Date.now()}_${file.name}`);
+          const snapshot = await uploadBytes(storageRef, file);
+          const downloadUrl = await getDownloadURL(snapshot.ref);
+
+          const isVideo = file.type.startsWith('video/');
+
+          await addDoc(collection(db, 'stories'), {
+            uid: currentUser.uid,
+            userId: currentUser.uid,
+            authorId: currentUser.uid,
+            username: currentUser.username,
+            avatar: currentUser.photoURL,
+            mediaUrl: downloadUrl,
+            caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
+            createdAt: serverTimestamp(),
+          });
+        } catch (err) {
+          console.error('Story upload error:', err);
+          alert('അപ്‌ലോഡ് ചെയ്യുന്നതിൽ പരാജയപ്പെട്ടു. ദയവായി വീണ്ടും ശ്രമിക്കുക.');
+        }
+      } else {
+        alert('ഫയർബേസ് സ്റ്റോറേജ് കോൺഫിഗർ ചെയ്തിട്ടില്ല.');
+      }
     };
     input.click();
   };
 
-  // Voice Room Handlers
+  // സ്റ്റോറി ഡിലീറ്റ് ചെയ്യാനുള്ള ഫങ്ഷൻ
+  const handleDeleteStory = async (storyId: string) => {
+    if (isFirebaseConfigured && db) {
+      try {
+        await deleteDoc(doc(db, 'stories', storyId));
+        setStories((prev) => prev.filter((s) => s.id !== storyId));
+        setActiveStoryIndex(null);
+      } catch (err) {
+        console.error('സ്റ്റോറി ഡിലീറ്റ് ചെയ്യുന്നതിൽ പിഴവ്:', err);
+      }
+    }
+  };
+
   const handleCreateVoiceRoom = async (data: {
     title: string;
     topic: string;
@@ -679,7 +660,6 @@ export default function App() {
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   };
 
-  // Navigation tab switch guard
   const handleTabChange = (tab: NavTab) => {
     if (!currentUser && (tab === 'upload' || tab === 'profile')) {
       setIsLoginModalOpen(true);
@@ -695,9 +675,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black flex justify-center text-zinc-100 selection:bg-rose-500/30 selection:text-white">
-      {/* Central Mobile Container with Instagram Aesthetic */}
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
-        {/* Top Header */}
         <Header
           currentUser={currentUser}
           onOpenLogin={() => setIsLoginModalOpen(true)}
@@ -707,12 +685,9 @@ export default function App() {
           onOpenVoiceRooms={() => setIsVoiceRoomsListOpen(true)}
         />
 
-        {/* Tab Pages */}
         <main className="flex-1">
-          {/* HOME FEED TAB */}
           {activeTab === 'home' && (
             <div>
-              {/* Stories Bar */}
               <StoriesBar
                 stories={stories}
                 currentUser={currentUser}
@@ -720,7 +695,6 @@ export default function App() {
                 onAddStory={handleAddUserStory}
               />
 
-              {/* Live Voice Rooms Bar */}
               <LiveVoiceRoomsBar
                 rooms={voiceRooms}
                 currentUser={currentUser}
@@ -735,7 +709,6 @@ export default function App() {
                 onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)}
               />
 
-              {/* Feed Posts */}
               <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
                 {isLoadingPosts ? (
                   <div className="flex flex-col items-center justify-center py-24 text-zinc-400 gap-2">
@@ -746,7 +719,7 @@ export default function App() {
                   <div className="text-center py-24 px-4 text-zinc-400">
                     <p className="text-base font-bold text-white">No posts yet</p>
                     <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-                      Be the first to share a moment! Apply filters like grayscale, sepia, or brightness and post.
+                      Be the first to share a moment! Apply filters and post.
                     </p>
                     <button
                       onClick={() => handleTabChange('upload')}
@@ -774,7 +747,6 @@ export default function App() {
             </div>
           )}
 
-          {/* EXPLORE / SEARCH TAB */}
           {activeTab === 'search' && (
             <ExploreView
               allPosts={posts}
@@ -782,7 +754,6 @@ export default function App() {
             />
           )}
 
-          {/* CREATE / UPLOAD POST TAB */}
           {activeTab === 'upload' && (
             <UploadView
               currentUser={currentUser}
@@ -792,12 +763,10 @@ export default function App() {
             />
           )}
 
-          {/* REELS TAB */}
           {activeTab === 'reels' && (
             <ReelsView onGoToUpload={() => handleTabChange('upload')} />
           )}
 
-          {/* PROFILE TAB */}
           {activeTab === 'profile' && (
             <ProfileView
               currentUser={currentUser}
@@ -813,26 +782,23 @@ export default function App() {
           )}
         </main>
 
-        {/* Bottom Navigation */}
         <BottomNav
           activeTab={activeTab}
           onTabChange={handleTabChange}
           currentUser={currentUser}
         />
 
-        {/* Story Viewer Modal */}
         {activeStoryIndex !== null && stories[activeStoryIndex] && (
           <StoryViewerModal
-  stories={stories}
-  initialIndex={activeStoryIndex}
-  currentUser={currentUser}
-  onClose={() => setActiveStoryIndex(null)}
-  onStorySeen={handleStorySeen}
-  onDeleteStory={handleDeleteStory}
-/>
+            stories={stories}
+            initialIndex={activeStoryIndex}
+            currentUser={currentUser}
+            onClose={() => setActiveStoryIndex(null)}
+            onStorySeen={handleStorySeen}
+            onDeleteStory={handleDeleteStory}
+          />
         )}
 
-        {/* Comments Modal Sheet */}
         {activeCommentPost && (
           <CommentsModal
             post={activeCommentPost}
@@ -843,7 +809,6 @@ export default function App() {
           />
         )}
 
-        {/* Post Detail Modal (Explore or Profile grid inspect) */}
         {selectedDetailPost && (
           <PostDetailModal
             post={selectedDetailPost}
@@ -858,20 +823,17 @@ export default function App() {
           />
         )}
 
-        {/* Direct Messages Drawer Modal */}
         <DirectMessagesModal
           isOpen={isDirectModalOpen}
           onClose={() => setIsDirectModalOpen(false)}
           currentUser={currentUser}
         />
 
-        {/* Notifications Activity Modal */}
         <NotificationsModal
           isOpen={isNotificationsOpen}
           onClose={() => setIsNotificationsOpen(false)}
         />
 
-        {/* Login / Auth Modal */}
         <LoginModal
           isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}
@@ -880,7 +842,6 @@ export default function App() {
           }}
         />
 
-        {/* Floating Mini-Player Bar when Voice Room is Minimized */}
         {activeVoiceRoom && !isVoiceRoomModalOpen && (
           <VoiceRoomMiniPlayer
             room={activeVoiceRoom}
@@ -891,7 +852,6 @@ export default function App() {
           />
         )}
 
-        {/* Full Voice Room Modal Stage */}
         {activeVoiceRoom && (
           <VoiceRoomModal
             room={activeVoiceRoom}
@@ -904,7 +864,6 @@ export default function App() {
           />
         )}
 
-        {/* Create Voice Room Modal */}
         <CreateVoiceRoomModal
           isOpen={isCreateVoiceRoomOpen}
           onClose={() => setIsCreateVoiceRoomOpen(false)}
@@ -912,7 +871,6 @@ export default function App() {
           onCreateRoom={handleCreateVoiceRoom}
         />
 
-        {/* Voice Rooms Directory Modal */}
         <VoiceRoomsListModal
           isOpen={isVoiceRoomsListOpen}
           onClose={() => setIsVoiceRoomsListOpen(false)}
