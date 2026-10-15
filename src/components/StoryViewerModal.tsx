@@ -90,7 +90,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
   );
   
   // നിങ്ങൾക്ക് (shoebell_shoe) ആരുടെ സ്റ്റോറിയും ഡിലീറ്റ് ചെയ്യാനുള്ള മാസ്റ്റർ അഡ്മിൻ പവർ
-  const isMasterAdmin = currentUser && currentUser.username === 'shoebell_shoe';
+  const isMasterAdmin =
+  currentUser?.username === 'shoebell_shoe';
   
   // സ്റ്റോറി ഓണർക്കോ അല്ലെങ്കിൽ മാസ്റ്റർ അഡ്മിനോ ഇത് ഡിലീറ്റ് ചെയ്യാം
   const canDelete = isOwner || isMasterAdmin;
