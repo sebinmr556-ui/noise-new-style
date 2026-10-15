@@ -152,6 +152,8 @@ export const StoryViewerModal: React.FC<StoryViewerModalProps> = ({
                 </span>
               </div>
             </div>
+            </div>
+          {/* Delete Story Button */}
 
             <div className="flex items-center gap-2">
               {/* ഡിലീറ്റ് ചെയ്യാനുള്ള ബട്ടൺ */}
