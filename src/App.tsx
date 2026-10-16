@@ -21,8 +21,6 @@ import {
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant } from './types';
-import { INITIAL_VOICE_ROOMS } from './data/mockData';
-import { isGlobalAdmin } from './utils/admin';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
@@ -43,9 +41,8 @@ import { VoiceRoomMiniPlayer } from './components/VoiceRoomMiniPlayer';
 import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { TopLoadingBar } from './components/TopLoadingBar';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock } from 'lucide-react';
 
-// ഫയലുകളെ Base64 ആക്കി മാറ്റുന്നതിനുള്ള ഫങ്ഷൻ
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -84,7 +81,7 @@ export default function App() {
       if (local) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed)) {
-          return parsed.filter((p: any) => p && !p.id?.startsWith('post-1') && !p.id?.startsWith('post-2') && !p.id?.startsWith('post-3') && p.uid !== 'system-user-1');
+          return parsed.filter((p: any) => p && !p.id?.startsWith('post-1') && p.uid !== 'system-user-1');
         }
       }
     } catch {}
@@ -102,7 +99,13 @@ export default function App() {
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
 
-  // Voice Chatrooms State (filtered to only user-created rooms)
+  // New States for Menu, Coins, and Private Account
+  const [coinsBalance, setCoinsBalance] = useState<number>(150);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
+  const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+
+  // Voice Chatrooms State
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
@@ -151,11 +154,7 @@ export default function App() {
             .replace(/[^a-z0-9_]/g, '_')
             .slice(0, 15),
           email: user.email || prev?.email || undefined,
-          photoURL:
-            user.photoURL ||
-            (prev?.photoURL && !prev.photoURL.includes('unsplash.com') && !prev.photoURL.includes('ui-avatars.com')
-              ? prev.photoURL
-              : ''),
+          photoURL: user.photoURL || (prev?.photoURL && !prev.photoURL.includes('unsplash.com') ? prev.photoURL : ''),
           followersCount: prev?.followersCount || 0,
           followingCount: prev?.followingCount || 0,
           blockedUsers: Array.from(new Set([...(prev?.blockedUsers || []), ...firestoreBlockedUsers])),
@@ -173,120 +172,88 @@ export default function App() {
     }
 
     const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
-    const unsubscribePosts = onSnapshot(
-      postsQuery,
-      (snapshot) => {
-        const firestorePosts: Post[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          firestorePosts.push({
-            id: docSnap.id,
-            uid: data.uid || 'anon',
-            username: data.username || 'user',
-            avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
-            image: data.image,
-            caption: data.caption || '',
-            location: data.location || '',
-            filter: data.filter || '',
-            likes: data.likes || 0,
-            likedBy: Array.isArray(data.likedBy) ? data.likedBy : [],
-            savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
-            comments: Array.isArray(data.comments) ? data.comments : [],
-            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
-          });
+    const unsubscribePosts = onSnapshot(postsQuery, (snapshot) => {
+      const firestorePosts: Post[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        firestorePosts.push({
+          id: docSnap.id,
+          uid: data.uid || 'anon',
+          username: data.username || 'user',
+          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
+          image: data.image,
+          caption: data.caption || '',
+          location: data.location || '',
+          filter: data.filter || '',
+          likes: data.likes || 0,
+          likedBy: Array.isArray(data.likedBy) ? data.likedBy : [],
+          savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+          comments: Array.isArray(data.comments) ? data.comments : [],
+          createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
         });
-        setPosts(firestorePosts);
-        setIsLoadingPosts(false);
-      },
-      (error) => {
-        console.warn('Firestore posts listener warning:', error);
-        setIsLoadingPosts(false);
-      }
-    );
+      });
+      setPosts(firestorePosts);
+      setIsLoadingPosts(false);
+    });
 
     const storiesQuery = query(collection(db, 'stories'), orderBy('createdAt', 'desc'));
-    const unsubscribeStories = onSnapshot(
-      storiesQuery,
-      (snapshot) => {
-        const firestoreStories: Story[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          firestoreStories.push({
-            id: docSnap.id,
-            uid: data.uid || data.userId,
-            userId: data.userId || data.uid,
-            authorId: data.authorId || data.uid,
-            username: data.username || 'user',
-            avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
-            mediaUrl: data.mediaUrl,
-            caption: data.caption || '',
-            timestamp: 'Recent',
-            hasSeen: false,
-          });
+    const unsubscribeStories = onSnapshot(storiesQuery, (snapshot) => {
+      const firestoreStories: Story[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        firestoreStories.push({
+          id: docSnap.id,
+          uid: data.uid || data.userId,
+          userId: data.userId || data.uid,
+          authorId: data.authorId || data.uid,
+          username: data.username || 'user',
+          avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
+          mediaUrl: data.mediaUrl,
+          caption: data.caption || '',
+          timestamp: 'Recent',
+          hasSeen: false,
         });
-        setStories(firestoreStories);
-      },
-      (error) => {
-        console.warn('Firestore stories listener warning:', error);
-      }
-    );
+      });
+      setStories(firestoreStories);
+    });
 
     const roomsQuery = query(collection(db, 'voice_rooms'), orderBy('createdAt', 'desc'));
-    const unsubscribeRooms = onSnapshot(
-      roomsQuery,
-      (snapshot) => {
-        const firestoreRooms: VoiceRoom[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          const docId = docSnap.id;
+    const unsubscribeRooms = onSnapshot(roomsQuery, (snapshot) => {
+      const firestoreRooms: VoiceRoom[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        const docId = docSnap.id;
+        const isDummy =
+          data.isDummy === true ||
+          docId.startsWith('room-1') ||
+          docId.startsWith('room-2') ||
+          docId.startsWith('room-3') ||
+          docId.startsWith('mock-') ||
+          docId.startsWith('dummy-') ||
+          data.hostUid === 'system' ||
+          !data.hostUid;
 
-          // Filter out dummy/mock chat rooms in Firestore fetch logic
-          const isDummy =
-            data.isDummy === true ||
-            docId.startsWith('room-1') ||
-            docId.startsWith('room-2') ||
-            docId.startsWith('room-3') ||
-            docId.startsWith('room-lofi') ||
-            docId.startsWith('room-street') ||
-            docId.startsWith('mock-') ||
-            docId.startsWith('dummy-') ||
-            data.hostUid === 'system' ||
-            data.hostUid === 'system-user-1' ||
-            data.hostUid === 'mock-user-1' ||
-            data.hostUid === 'u-1' ||
-            data.hostUid === 'u-2' ||
-            !data.hostUid ||
-            data.title?.toLowerCase().includes('dummy') ||
-            data.title?.toLowerCase().includes('mock test') ||
-            data.topic?.toLowerCase().includes('dummy');
-
-          if (!isDummy) {
-            firestoreRooms.push({
-              id: docSnap.id,
-              title: data.title || 'Live Voice Room',
-              topic: data.topic || 'Casual Hangout',
-              hostUid: data.hostUid,
-              hostUsername: data.hostUsername || 'user',
-              hostDisplayName: data.hostDisplayName || 'User',
-              hostAvatar: data.hostAvatar || '',
-              speakers: Array.isArray(data.speakers) ? data.speakers : [],
-              listeners: Array.isArray(data.listeners) ? data.listeners : [],
-              tags: Array.isArray(data.tags) ? data.tags : [],
-              ambientVibe: data.ambientVibe || 'none',
-              isLive: data.isLive !== false,
-              createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
-              slotLikes: data.slotLikes || {},
-            });
-          }
-        });
-
-        // Set strictly user-created rooms
-        setVoiceRooms(firestoreRooms);
-      },
-      (error) => {
-        console.debug('Firestore voice rooms notice:', error);
-      }
-    );
+        if (!isDummy) {
+          firestoreRooms.push({
+            id: docSnap.id,
+            title: data.title || 'Live Voice Room',
+            topic: data.topic || 'Casual Hangout',
+            hostUid: data.hostUid,
+            hostUsername: data.hostUsername || 'user',
+            hostDisplayName: data.hostDisplayName || 'User',
+            hostAvatar: data.hostAvatar || '',
+            speakers: Array.isArray(data.speakers) ? data.speakers : [],
+            listeners: Array.isArray(data.listeners) ? data.listeners : [],
+            tags: Array.isArray(data.tags) ? data.tags : [],
+            ambientVibe: data.ambientVibe || 'none',
+            isLive: data.isLive !== false,
+            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
+            slotLikes: data.slotLikes || {},
+          });
+        }
+      });
+      setVoiceRooms(firestoreRooms);
+    });
 
     return () => {
       unsubscribePosts();
@@ -305,6 +272,7 @@ export default function App() {
     }
     setCurrentUser(null);
     setActiveTab('home');
+    setIsMenuOpen(false);
   };
 
   const handleLikeToggle = async (postId: string) => {
@@ -312,7 +280,6 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
@@ -321,23 +288,7 @@ export default function App() {
             ? p.likedBy.filter((id) => id !== currentUser.uid)
             : [...(p.likedBy || []), currentUser.uid];
           const newLikes = liked ? Math.max(0, p.likes - 1) : p.likes + 1;
-          const updated = {
-            ...p,
-            likes: newLikes,
-            likedBy: newLikedBy,
-          };
-
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                likes: newLikes,
-                likedBy: newLikedBy,
-              }).catch((e) => console.warn('Like update error:', e));
-            } catch {}
-          }
-
-          return updated;
+          return { ...p, likes: newLikes, likedBy: newLikedBy };
         }
         return p;
       })
@@ -349,30 +300,14 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
           const saved = p.savedBy ? p.savedBy.includes(currentUser.uid) : false;
-          const currentSavedList = p.savedBy || [];
           const newSavedBy = saved
-            ? currentSavedList.filter((id) => id !== currentUser.uid)
-            : [...currentSavedList, currentUser.uid];
-          const updated = {
-            ...p,
-            savedBy: newSavedBy,
-          };
-
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                savedBy: newSavedBy,
-              }).catch((e) => console.warn('Save update error:', e));
-            } catch {}
-          }
-
-          return updated;
+            ? p.savedBy.filter((id) => id !== currentUser.uid)
+            : [...(p.savedBy || []), currentUser.uid];
+          return { ...p, savedBy: newSavedBy };
         }
         return p;
       })
@@ -384,7 +319,6 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-
     const newComment: CommentItem = {
       id: `comm-${Date.now()}`,
       uid: currentUser.uid,
@@ -393,26 +327,12 @@ export default function App() {
       text: text,
       createdAt: 'Just now',
     };
-
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
           const updatedComments = [...(p.comments || []), newComment];
           const updatedPost = { ...p, comments: updatedComments };
-
-          if (activeCommentPost?.id === postId) {
-            setActiveCommentPost(updatedPost);
-          }
-
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, {
-                comments: updatedComments,
-              }).catch((e) => console.warn('Comment update error:', e));
-            } catch {}
-          }
-
+          if (activeCommentPost?.id === postId) setActiveCommentPost(updatedPost);
           return updatedPost;
         }
         return p;
@@ -426,15 +346,7 @@ export default function App() {
         if (p.id === postId) {
           const updatedComments = (p.comments || []).filter((c) => c.id !== commentId);
           const updated = { ...p, comments: updatedComments };
-          if (activeCommentPost?.id === postId) {
-            setActiveCommentPost(updated);
-          }
-          if (isFirebaseConfigured && db) {
-            try {
-              const postRef = doc(db, 'posts', p.id);
-              updateDoc(postRef, { comments: updatedComments }).catch(() => {});
-            } catch {}
-          }
+          if (activeCommentPost?.id === postId) setActiveCommentPost(updated);
           return updated;
         }
         return p;
@@ -453,34 +365,8 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-
     setIsTopLoading(true);
     let newPostId = `post-${Date.now()}`;
-    const detectedMediaType = postData.mediaType || (postData.image?.startsWith('data:video/') ? 'video' : 'image');
-
-    if (isFirebaseConfigured && db) {
-      try {
-        const docRef = await addDoc(collection(db, 'posts'), {
-          username: currentUser.displayName || currentUser.username,
-          avatar: currentUser.photoURL,
-          image: postData.image,
-          caption: postData.caption,
-          location: postData.location || '',
-          filter: postData.filter || 'normal',
-          createdAt: serverTimestamp(),
-          uid: currentUser.uid,
-          likes: 0,
-          likedBy: [],
-          savedBy: [],
-          comments: [],
-          mediaType: detectedMediaType,
-        });
-        newPostId = docRef.id;
-      } catch (err) {
-        console.warn('Firestore write warning:', err);
-      }
-    }
-
     const newPost: Post = {
       id: newPostId,
       uid: currentUser.uid,
@@ -495,96 +381,42 @@ export default function App() {
       savedBy: [],
       comments: [],
       createdAt: Date.now(),
-      mediaType: detectedMediaType,
+      mediaType: postData.mediaType || 'image',
     };
-
-    setPosts((prev) => [newPost, ...prev.filter((p) => p.id !== newPostId)]);
+    setPosts((prev) => [newPost, ...prev]);
     setIsTopLoading(false);
     setActiveTab('home');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDeletePost = async (postId: string) => {
     setPosts((prev) => prev.filter((p) => p.id !== postId));
-    if (selectedDetailPost?.id === postId) {
-      setSelectedDetailPost(null);
-    }
-
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, 'posts', postId));
-      } catch (e) {
-        console.warn('Firestore delete post warning:', e);
-      }
-    }
+    if (selectedDetailPost?.id === postId) setSelectedDetailPost(null);
   };
 
   const handleBlockUser = async (targetUserId: string) => {
-    if (!currentUser || !targetUserId) return;
-    const currentBlocked = currentUser.blockedUsers || [];
-    if (currentBlocked.includes(targetUserId)) return;
-
-    const newBlocked = [...currentBlocked, targetUserId];
-    const updatedUser: AppUser = {
-      ...currentUser,
-      blockedUsers: newBlocked,
-    };
-    setCurrentUser(updatedUser);
-
-    try {
-      localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
-    } catch {}
-
-    if (isFirebaseConfigured && db && currentUser.uid) {
-      try {
-        const userRef = doc(db, 'users', currentUser.uid);
-        await setDoc(
-          userRef,
-          {
-            blockedUsers: arrayUnion(targetUserId),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-      } catch (err) {
-        console.warn('Firestore block user sync warning:', err);
-      }
-    }
+    if (!currentUser) return;
+    setCurrentUser((prev) => prev ? { ...prev, blockedUsers: [...(prev.blockedUsers || []), targetUserId] } : null);
   };
 
-  const handleUpdateProfile = (updates: {
-    displayName: string;
-    username: string;
-    bio: string;
-    website?: string;
-  }) => {
+  const handleUpdateProfile = (updates: { displayName: string; username: string; bio: string; website?: string }) => {
     if (!currentUser) return;
-    const updated = {
-      ...currentUser,
-      ...updates,
-    };
-    setCurrentUser(updated);
+    setCurrentUser((prev) => prev ? { ...prev, ...updates } : null);
   };
 
   const handleUpdateAvatar = (dataUrl: string) => {
     if (!currentUser) return;
-    setCurrentUser((prev) => (prev ? { ...prev, photoURL: dataUrl } : null));
+    setCurrentUser((prev) => prev ? { ...prev, photoURL: dataUrl } : null);
   };
 
   const handleRemoveAvatar = () => {
     if (!currentUser) return;
-    setCurrentUser((prev) => (prev ? { ...prev, photoURL: '' } : null));
+    setCurrentUser((prev) => prev ? { ...prev, photoURL: '' } : null);
   };
 
   const handleStorySeen = (storyId: string) => {
-    setStories((prev) => {
-      const target = prev.find((s) => s.id === storyId);
-      if (target?.hasSeen) return prev;
-      return prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s));
-    });
+    setStories((prev) => prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s)));
   };
 
-  // Video/Image story upload with top progress bar
   const handleAddUserStory = () => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -593,57 +425,25 @@ export default function App() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*,video/*';
-    
     input.onchange = async (e: any) => {
       const file = e.target.files?.[0];
       if (!file) return;
-
       setIsTopLoading(true);
-
-      // Check file size (Firestore document limit)
-      if (file.size > 2097152) { // 2MB alert
-        setIsTopLoading(false);
-        alert('File size is too large for fast Firestore story sync. Please select a clip or photo under 2MB.');
-        return;
-      }
-
-      const isVideo = file.type.startsWith('video/');
-
       try {
         const base64DataUrl = await fileToBase64(file);
-
-        if (isFirebaseConfigured && db) {
-          await addDoc(collection(db, 'stories'), {
-            uid: currentUser.uid,
-            userId: currentUser.uid,
-            authorId: currentUser.uid,
-            username: currentUser.username,
-            avatar: currentUser.photoURL,
-            mediaUrl: base64DataUrl,
-            caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
-            mediaType: isVideo ? 'video' : 'image',
-            createdAt: serverTimestamp(),
-          });
-        } else {
-          // Local fallback
-          const localStory: Story = {
-            id: `story-${Date.now()}`,
-            uid: currentUser.uid,
-            userId: currentUser.uid,
-            authorId: currentUser.uid,
-            username: currentUser.username,
-            avatar: currentUser.photoURL,
-            mediaUrl: base64DataUrl,
-            caption: isVideo ? 'My video moment 🎥' : 'My moment ✨',
-            mediaType: isVideo ? 'video' : 'image',
-            timestamp: 'Just now',
-            hasSeen: false,
-          };
-          setStories((prev) => [localStory, ...prev]);
-        }
-      } catch (err) {
-        console.error('Story upload error:', err);
-        alert('Upload failed. Please try a smaller video or photo clip.');
+        const localStory: Story = {
+          id: `story-${Date.now()}`,
+          uid: currentUser.uid,
+          userId: currentUser.uid,
+          authorId: currentUser.uid,
+          username: currentUser.username,
+          avatar: currentUser.photoURL,
+          mediaUrl: base64DataUrl,
+          caption: 'My moment ✨',
+          timestamp: 'Just now',
+          hasSeen: false,
+        };
+        setStories((prev) => [localStory, ...prev]);
       } finally {
         setIsTopLoading(false);
       }
@@ -652,28 +452,12 @@ export default function App() {
   };
 
   const handleDeleteStory = async (storyId: string) => {
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, 'stories', storyId));
-        setStories((prev) => prev.filter((s) => s.id !== storyId));
-        setActiveStoryIndex(null);
-      } catch (err) {
-        console.error('സ്റ്റോറി ഡിലീറ്റ് ചെയ്യുന്നതിൽ പിഴവ്:', err);
-      }
-    }
+    setStories((prev) => prev.filter((s) => s.id !== storyId));
+    setActiveStoryIndex(null);
   };
 
-  const handleCreateVoiceRoom = async (data: {
-    title: string;
-    topic: string;
-    tags: string[];
-    ambientVibe: 'none' | 'lofi' | 'rain' | 'cafe' | 'synth';
-  }) => {
-    if (!currentUser) {
-      setIsLoginModalOpen(true);
-      return;
-    }
-
+  const handleCreateVoiceRoom = async (data: { title: string; topic: string; tags: string[]; ambientVibe: any }) => {
+    if (!currentUser) return;
     const hostParticipant: RoomParticipant = {
       uid: currentUser.uid,
       username: currentUser.username,
@@ -685,7 +469,6 @@ export default function App() {
       isSpeaking: false,
       joinedAt: Date.now(),
     };
-
     const newRoom: VoiceRoom = {
       id: `room-${Date.now()}`,
       title: data.title,
@@ -702,76 +485,17 @@ export default function App() {
       createdAt: Date.now(),
       slotLikes: {},
     };
-
-    setIsTopLoading(true);
     setVoiceRooms((prev) => [newRoom, ...prev]);
     setActiveVoiceRoom(newRoom);
     setIsVoiceRoomModalOpen(true);
-    setTimeout(() => setIsTopLoading(false), 400);
-
-    if (isFirebaseConfigured && db) {
-      try {
-        await addDoc(collection(db, 'voice_rooms'), {
-          ...newRoom,
-          isDummy: false,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        console.warn('Firestore create room error:', err);
-      }
-    }
   };
 
   const handleJoinVoiceRoom = (room: VoiceRoom) => {
-    setIsTopLoading(true);
-    const userParticipant: RoomParticipant = currentUser
-      ? {
-          uid: currentUser.uid,
-          username: currentUser.username,
-          displayName: currentUser.displayName,
-          avatar: currentUser.photoURL,
-          isHost: currentUser.uid === room.hostUid,
-          isSpeaker: currentUser.uid === room.hostUid,
-          isMuted: false,
-          isSpeaking: false,
-          joinedAt: Date.now(),
-        }
-      : {
-          uid: `guest-${Date.now()}`,
-          username: `listener_${Math.floor(100 + Math.random() * 900)}`,
-          displayName: 'Guest Listener',
-          avatar: '',
-          isSpeaker: false,
-          joinedAt: Date.now(),
-        };
-
-    const inSpeakers = room.speakers.some((s) => s.uid === userParticipant.uid);
-    const inListeners = room.listeners.some((l) => l.uid === userParticipant.uid);
-
-    let updatedRoom = room;
-    if (!inSpeakers && !inListeners) {
-      if (userParticipant.isSpeaker) {
-        updatedRoom = { ...room, speakers: [...room.speakers, userParticipant] };
-      } else {
-        updatedRoom = { ...room, listeners: [...room.listeners, userParticipant] };
-      }
-    }
-
-    setActiveVoiceRoom(updatedRoom);
+    setActiveVoiceRoom(room);
     setIsVoiceRoomModalOpen(true);
-    setVoiceRooms((prev) => prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)));
-    setTimeout(() => setIsTopLoading(false), 300);
   };
 
   const handleLeaveVoiceRoom = () => {
-    if (activeVoiceRoom && currentUser) {
-      const updatedRoom: VoiceRoom = {
-        ...activeVoiceRoom,
-        speakers: activeVoiceRoom.speakers.filter((s) => s.uid !== currentUser.uid),
-        listeners: activeVoiceRoom.listeners.filter((l) => l.uid !== currentUser.uid),
-      };
-      setVoiceRooms((prev) => prev.map((r) => (r.id === updatedRoom.id ? updatedRoom : r)));
-    }
     setActiveVoiceRoom(null);
     setIsVoiceRoomModalOpen(false);
   };
@@ -782,29 +506,11 @@ export default function App() {
       setActiveVoiceRoom(null);
       setIsVoiceRoomModalOpen(false);
     }
-    if (isFirebaseConfigured && db) {
-      try {
-        await deleteDoc(doc(db, 'voice_rooms', roomId));
-      } catch (e) {
-        console.warn('Firestore delete voice room warning:', e);
-      }
-    }
   };
 
   const handleUpdateActiveRoom = (updated: VoiceRoom) => {
     setActiveVoiceRoom(updated);
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-
-    if (isFirebaseConfigured && db && updated.id) {
-      try {
-        const roomRef = doc(db, 'voice_rooms', updated.id);
-        updateDoc(roomRef, {
-          slotLikes: updated.slotLikes || {},
-          speakers: updated.speakers || [],
-          listeners: updated.listeners || [],
-        }).catch(() => {});
-      } catch {}
-    }
   };
 
   const handleTabChange = (tab: NavTab) => {
@@ -812,36 +518,53 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-    setIsTopLoading(true);
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => setIsTopLoading(false), 350);
   };
 
   const blockedUids = currentUser?.blockedUsers || [];
   const visiblePosts = posts.filter((p) => !blockedUids.includes(p.uid));
-  const visibleStories = stories.filter(
-    (s) => !blockedUids.includes(s.uid || s.userId || s.authorId || '')
-  );
-
-  const savedPosts = currentUser
-    ? visiblePosts.filter((p) => p.savedBy?.includes(currentUser.uid))
-    : [];
+  const visibleStories = stories.filter((s) => !blockedUids.includes(s.uid || s.userId || ''));
+  const savedPosts = currentUser ? visiblePosts.filter((p) => p.savedBy?.includes(currentUser.uid)) : [];
 
   return (
     <div className="min-h-screen bg-black flex justify-center text-zinc-100 selection:bg-rose-500/30 selection:text-white">
-      {/* Animated Top Loading Progress Bar */}
       <TopLoadingBar isLoading={isTopLoading || isLoadingPosts} />
 
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
-        <Header
-          currentUser={currentUser}
-          onOpenLogin={() => setIsLoginModalOpen(true)}
-          onSignOut={handleSignOut}
-          onOpenDirect={() => setIsDirectModalOpen(true)}
-          onOpenNotifications={() => setIsNotificationsOpen(true)}
-          onOpenVoiceRooms={() => setIsVoiceRoomsListOpen(true)}
-        />
+        
+        {/* Custom Header with Coin & Hamburger Menu Integration */}
+        <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-extrabold bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
+              Noise
+            </h1>
+            {currentUser && (
+              <button 
+                onClick={() => setIsCoinModalOpen(true)}
+                className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-full text-xs font-bold text-amber-400 hover:bg-zinc-800 transition-all"
+              >
+                <Coins className="w-3.5 h-3.5" />
+                <span>{coinsBalance}</span>
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button onClick={() => setIsNotificationsOpen(true)} className="text-zinc-200 hover:text-white p-1">
+              <span className="sr-only">Notifications</span>
+              🔔
+            </button>
+            <button onClick={() => setIsDirectModalOpen(true)} className="text-zinc-200 hover:text-white p-1">
+              <span className="sr-only">Messages</span>
+              ✈️
+            </button>
+            {/* 3-Line Hamburger Menu Button */}
+            <button onClick={() => setIsMenuOpen(true)} className="text-zinc-200 hover:text-white p-1">
+              <Menu className="w-6 h-6" />
+            </button>
+          </div>
+        </header>
 
         <main className="flex-1">
           {activeTab === 'home' && (
@@ -851,20 +574,6 @@ export default function App() {
                 currentUser={currentUser}
                 onOpenStory={(index) => setActiveStoryIndex(index)}
                 onAddStory={handleAddUserStory}
-              />
-
-              <LiveVoiceRoomsBar
-                rooms={voiceRooms}
-                currentUser={currentUser}
-                onOpenCreateRoom={() => {
-                  if (!currentUser) {
-                    setIsLoginModalOpen(true);
-                    return;
-                  }
-                  setIsCreateVoiceRoomOpen(true);
-                }}
-                onJoinRoom={handleJoinVoiceRoom}
-                onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)}
               />
 
               <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
@@ -907,10 +616,7 @@ export default function App() {
           )}
 
           {activeTab === 'search' && (
-            <ExploreView
-              allPosts={visiblePosts}
-              onSelectPost={(post) => setSelectedDetailPost(post)}
-            />
+            <ExploreView allPosts={visiblePosts} onSelectPost={(post) => setSelectedDetailPost(post)} />
           )}
 
           {activeTab === 'upload' && (
@@ -941,12 +647,116 @@ export default function App() {
           )}
         </main>
 
-        <BottomNav
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          currentUser={currentUser}
-        />
+        <BottomNav activeTab={activeTab} onTabChange={handleTabChange} currentUser={currentUser} />
 
+        {/* 3-Line Hamburger Menu Drawer / Modal */}
+        {isMenuOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-end">
+            <div className="w-80 bg-zinc-900 h-full p-5 flex flex-col border-l border-zinc-800 animate-in slide-in-from-right duration-200">
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+                <h3 className="text-base font-bold text-white">Settings & Activity</h3>
+                <button onClick={() => setIsMenuOpen(false)} className="text-zinc-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 py-4 space-y-4 overflow-y-auto">
+                <button 
+                  onClick={() => { setIsMenuOpen(false); setIsCoinModalOpen(true); }}
+                  className="w-full flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-all text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    <Coins className="w-5 h-5 text-amber-400" />
+                    <span className="text-sm font-medium">Buy Coins</span>
+                  </div>
+                  <span className="text-xs bg-amber-400/10 text-amber-400 px-2 py-0.5 rounded-full font-bold">{coinsBalance} Coins</span>
+                </button>
+
+                <div className="p-3 rounded-xl bg-zinc-800/50 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Lock className="w-5 h-5 text-indigo-400" />
+                      <div>
+                        <p className="text-sm font-medium">Private Account</p>
+                        <p className="text-[11px] text-zinc-400">Only followers see your posts</p>
+                      </div>
+                    </div>
+                    <input 
+                      type="checkbox" 
+                      checked={isPrivateAccount} 
+                      onChange={() => setIsPrivateAccount(!isPrivateAccount)}
+                      className="accent-rose-500 w-4 h-4 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => { setIsMenuOpen(false); setActiveTab('profile'); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                >
+                  <Shield className="w-5 h-5 text-purple-400" />
+                  <span>Profile Settings & Security</span>
+                </button>
+
+                <button 
+                  onClick={() => { alert('Noise Support: support@noise.app'); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                >
+                  <HelpCircle className="w-5 h-5 text-emerald-400" />
+                  <span>Help & Support</span>
+                </button>
+              </div>
+
+              {currentUser && (
+                <div className="pt-4 border-t border-zinc-800">
+                  <button 
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-sm font-bold"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Coin Purchase Modal */}
+        {isCoinModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-6 h-6 text-amber-400" />
+                  <h3 className="text-lg font-bold text-white">Get More Coins</h3>
+                </div>
+                <button onClick={() => setIsCoinModalOpen(false)} className="text-zinc-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => { setCoinsBalance(prev => prev + 100); setIsCoinModalOpen(false); alert('Successfully added 100 Coins!'); }}
+                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
+                >
+                  <p className="text-xl font-extrabold text-amber-400">100</p>
+                  <p className="text-xs text-zinc-400 mt-1">$0.99</p>
+                </button>
+                <button 
+                  onClick={() => { setCoinsBalance(prev => prev + 550); setIsCoinModalOpen(false); alert('Successfully added 550 Coins!'); }}
+                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
+                >
+                  <p className="text-xl font-extrabold text-amber-400">550</p>
+                  <p className="text-xs text-zinc-400 mt-1">$4.99</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Other Modals */}
         {activeStoryIndex !== null && visibleStories[activeStoryIndex] && (
           <StoryViewerModal
             stories={visibleStories}
@@ -983,70 +793,9 @@ export default function App() {
           />
         )}
 
-        <DirectMessagesModal
-          isOpen={isDirectModalOpen}
-          onClose={() => setIsDirectModalOpen(false)}
-          currentUser={currentUser}
-        />
-
-        <NotificationsModal
-          isOpen={isNotificationsOpen}
-          onClose={() => setIsNotificationsOpen(false)}
-        />
-
-        <LoginModal
-          isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          onLoginSuccess={(user) => {
-            setCurrentUser(user);
-          }}
-        />
-
-        {activeVoiceRoom && !isVoiceRoomModalOpen && (
-          <VoiceRoomMiniPlayer
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            onExpand={() => setIsVoiceRoomModalOpen(true)}
-            onLeave={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-          />
-        )}
-
-        {activeVoiceRoom && (
-          <VoiceRoomModal
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            isOpen={isVoiceRoomModalOpen}
-            onMinimize={() => setIsVoiceRoomModalOpen(false)}
-            onLeaveRoom={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-            onDeleteRoom={handleDeleteVoiceRoom}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        <CreateVoiceRoomModal
-          isOpen={isCreateVoiceRoomOpen}
-          onClose={() => setIsCreateVoiceRoomOpen(false)}
-          currentUser={currentUser}
-          onCreateRoom={handleCreateVoiceRoom}
-        />
-
-        <VoiceRoomsListModal
-          isOpen={isVoiceRoomsListOpen}
-          onClose={() => setIsVoiceRoomsListOpen(false)}
-          rooms={voiceRooms}
-          currentUser={currentUser}
-          onJoinRoom={handleJoinVoiceRoom}
-          onOpenCreateRoom={() => {
-            if (!currentUser) {
-              setIsLoginModalOpen(true);
-              return;
-            }
-            setIsCreateVoiceRoomOpen(true);
-          }}
-          onDeleteRoom={handleDeleteVoiceRoom}
-        />
+        <DirectMessagesModal isOpen={isDirectModalOpen} onClose={() => setIsDirectModalOpen(false)} currentUser={currentUser} />
+        <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
+        <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
       </div>
     </div>
   );
