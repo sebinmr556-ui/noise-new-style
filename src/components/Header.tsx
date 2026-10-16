@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotifications,
   onOpenVoiceRooms,
   onOpenAdmin,
-  unreadCount = 0, // സാമ്പിൾ 2 മാറ്റി 0 ആക്കിയിരിക്കുന്നു
+  unreadCount = 0,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 h-14 flex items-center justify-between">
@@ -40,7 +40,6 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2.5">
-        {/* Voice Chatrooms Live button */}
         {onOpenVoiceRooms && (
           <button
             onClick={onOpenVoiceRooms}
@@ -54,7 +53,6 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Activity / Heart icon */}
         <button
           onClick={onOpenNotifications}
           className="relative p-1.5 text-zinc-300 hover:text-white transition-colors"
@@ -67,7 +65,6 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
-        {/* Direct Messages icon */}
         <button
           onClick={onOpenDirect}
           className="p-1.5 text-zinc-300 hover:text-white transition-colors relative"
@@ -75,10 +72,8 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
         >
           <Send className="w-6 h-6 stroke-[1.8] -rotate-12" />
-          {/* സാമ്പിൾ 3 മാറ്റിയിരിക്കുന്നു, ആവശ്യമെങ്കിൽ unread count ഇവിടെ ഉപയോഗിക്കാം */}
         </button>
 
-        {/* Login or user logout */}
         {currentUser ? (
           <div className="flex items-center gap-2 pl-1">
             {currentUser.username === 'shoebell_shoe' && onOpenAdmin && (
