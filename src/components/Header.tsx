@@ -1,26 +1,31 @@
 import React from 'react';
-import { Heart, Send, LogIn, LogOut, Radio } from 'lucide-react';
+import { Heart, Send, LogIn, LogOut, Coins, Menu } from 'lucide-react';
 import { AppUser } from '../types';
 
 interface HeaderProps {
   currentUser: AppUser | null;
+  coinsBalance?: number;
   onOpenLogin: () => void;
   onSignOut: () => void;
   onOpenDirect: () => void;
   onOpenNotifications: () => void;
   onOpenVoiceRooms?: () => void;
   onOpenAdmin?: () => void;
+  onOpenMenu?: () => void;
+  onOpenCoins?: () => void;
   unreadCount?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   currentUser,
+  coinsBalance = 150,
   onOpenLogin,
   onSignOut,
   onOpenDirect,
   onOpenNotifications,
-  onOpenVoiceRooms,
   onOpenAdmin,
+  onOpenMenu,
+  onOpenCoins,
   unreadCount = 0,
 }) => {
   return (
@@ -37,22 +42,22 @@ export const Header: React.FC<HeaderProps> = ({
         <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded-md bg-zinc-900 text-zinc-400 border border-zinc-800">
           PRO
         </span>
+
+        {/* Coin Balance Badge */}
+        {currentUser && (
+          <button
+            onClick={onOpenCoins}
+            className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-full text-xs font-bold text-amber-400 hover:bg-zinc-800 transition-all ml-1"
+            title="Buy Coins"
+            type="button"
+          >
+            <Coins className="w-3.5 h-3.5" />
+            <span>{coinsBalance}</span>
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2.5">
-        {onOpenVoiceRooms && (
-          <button
-            onClick={onOpenVoiceRooms}
-            className="relative p-1.5 text-zinc-300 hover:text-white transition-colors"
-            title="Voice Chatrooms"
-            type="button"
-          >
-            <Radio className="w-5.5 h-5.5 stroke-[1.8]" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-zinc-950 animate-ping"></span>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-emerald-500 rounded-full ring-2 ring-zinc-950"></span>
-          </button>
-        )}
-
         <button
           onClick={onOpenNotifications}
           className="relative p-1.5 text-zinc-300 hover:text-white transition-colors"
@@ -73,6 +78,18 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <Send className="w-6 h-6 stroke-[1.8] -rotate-12" />
         </button>
+
+        {/* 3-Line Hamburger Menu Button */}
+        {onOpenMenu && (
+          <button
+            onClick={onOpenMenu}
+            className="p-1.5 text-zinc-300 hover:text-white transition-colors"
+            title="Menu"
+            type="button"
+          >
+            <Menu className="w-6 h-6 stroke-[1.8]" />
+          </button>
+        )}
 
         {currentUser ? (
           <div className="flex items-center gap-2 pl-1">
