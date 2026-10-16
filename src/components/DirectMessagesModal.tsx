@@ -44,8 +44,6 @@ interface ChatContact {
   online: boolean;
 }
 
-const QUICK_EMOJIS = ['❤️', '🔥', '😂', '😍', '👏'];
-
 const ContactAvatar: React.FC<{ contact: ChatContact; className?: string; size?: 'sm' | 'md' | 'lg' | 'xl' }> = ({
   contact,
   className = '',
@@ -88,7 +86,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   onClose,
   currentUser,
 }) => {
-  // സാമ്പിൾ കോൺടാക്റ്റുകൾ ഒഴിവാക്കി ശൂന്യമായ അറേ നൽകിയിരിക്കുന്നു
   const [contacts, setContacts] = useState<ChatContact[]>([]);
   const [selectedContact, setSelectedContact] = useState<ChatContact | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,19 +94,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [isComposing, setIsComposing] = useState(false);
   const [newChatInput, setNewChatInput] = useState('');
 
-  // Simulated Call state
   const [activeCall, setActiveCall] = useState<{ type: 'audio' | 'video'; user: ChatContact; status: string } | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Auto scroll to bottom of active chat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [threads, selectedContact]);
 
-  // ഫയർബേസിൽ നിന്ന് റിയൽ ചാറ്റുകൾ ഫെച്ച് ചെയ്യാനുള്ള കോഡ്
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !currentUser) return;
 
@@ -120,7 +114,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        // ഇവിടെ നിങ്ങളുടെ ഫയർബേസ് സ്ട്രക്ചർ അനുസരിച്ച് ഡാറ്റ മാപ്പ് ചെയ്യാം
+        // Firebase data mapping here if needed
       });
 
       setContacts(realContacts);
@@ -164,7 +158,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       setInputText('');
     }
 
-    // ഫയർബേസിലേക്ക് മെസ്സേജ് സേവ് ചെയ്യാൻ
     if (isFirebaseConfigured && db) {
       try {
         await addDoc(collection(db, 'direct_messages'), {
