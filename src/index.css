@@ -19,25 +19,39 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 /* Hide scrollbar for IE, Edge and Firefox */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
 
-/* Instagram story gradient ring */
+/* Modern Electric Blue + Violet Story Gradient */
 .ig-story-gradient {
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  background: linear-gradient(
+    45deg,
+    #00D4FF 0%,
+    #3B82F6 30%,
+    #6366F1 65%,
+    #A855F7 100%
+  );
 }
 
 .ig-story-viewed {
   background: #3f3f46;
 }
 
-/* Logo Gradient */
+/* Premium Blue + Violet Logo Gradient */
 .brand-gradient-text {
-  background: linear-gradient(45deg, #f09433 0%, #dc2743 45%, #bc1888 80%, #6366f1 100%);
+  background: linear-gradient(
+    90deg,
+    #22D3EE 0%,
+    #3B82F6 35%,
+    #818CF8 70%,
+    #C084FC 100%
+  );
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
