@@ -20,3 +20,18 @@ export const isGlobalAdmin = (user: AppUser | null | undefined): boolean => {
     uid.includes('sebin')
   );
 };
+
+export const isVerifiedUser = (
+  userOrObj?: { isVerified?: boolean; username?: string; uid?: string } | string | null
+): boolean => {
+  if (!userOrObj) return false;
+  if (typeof userOrObj === 'string') {
+    const un = userOrObj.toLowerCase().trim();
+    return ADMIN_USERNAMES.includes(un) || un === 'sebin_mr' || un === 'shoebell_shoe' || un.includes('verified');
+  }
+  if (userOrObj.isVerified) return true;
+  const un = (userOrObj.username || '').toLowerCase().trim();
+  const uid = (userOrObj.uid || '').toLowerCase().trim();
+  return ADMIN_USERNAMES.includes(un) || un === 'sebin_mr' || un === 'shoebell_shoe' || uid === 'admin' || uid.includes('sebin');
+};
+

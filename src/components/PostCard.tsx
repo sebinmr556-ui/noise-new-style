@@ -58,6 +58,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
   const [showReportModal, setShowReportModal] = useState(false);
   const [selectedReportReason, setSelectedReportReason] = useState<string | null>(null);
+  const [reportDetails, setReportDetails] = useState('');
   const [isReportSubmitted, setIsReportSubmitted] = useState(false);
   const [isPostHidden, setIsPostHidden] = useState(false);
   const [hiddenReason, setHiddenReason] = useState<'report' | 'block'>('report');
@@ -553,31 +554,52 @@ export const PostCard: React.FC<PostCardProps> = ({
             </div>
 
             {isReportSubmitted ? (
-              <div className="p-6 text-center space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400">
-                  <Check className="w-6 h-6" />
+              <div className="p-6 text-center space-y-3.5">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-lg">
+                  <Check className="w-6 h-6 stroke-[3]" />
                 </div>
-                <h4 className="text-sm font-bold text-white">Report Received</h4>
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  Thank you for reporting this content. Our moderation team will review this post to ensure community safety.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowReportModal(false);
-                    setIsPostHidden(true);
-                  }}
-                  className="w-full py-2 bg-gradient-to-r from-rose-500 to-indigo-600 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity"
-                >
-                  Done & Hide Post
-                </button>
+                <div>
+                  <h4 className="text-sm font-bold text-white">Report Received</h4>
+                  <p className="text-xs text-zinc-400 leading-relaxed mt-1">
+                    Thank you for letting us know. We have received your report regarding <span className="text-rose-400 font-medium">"{selectedReportReason}"</span> from @{post.username}.
+                  </p>
+                </div>
+                {reportDetails && (
+                  <p className="text-[11px] bg-zinc-800/60 border border-zinc-800 rounded-lg p-2 text-zinc-300 italic text-left">
+                    "{reportDetails}"
+                  </p>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReportModal(false)}
+                    className="flex-1 py-2 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-colors"
+                  >
+                    Keep in Feed
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowReportModal(false);
+                      setIsPostHidden(true);
+                    }}
+                    className="flex-1 py-2 bg-gradient-to-r from-rose-500 to-indigo-600 text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity shadow-md"
+                  >
+                    Done & Hide Post
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="p-4 space-y-3">
-                <p className="text-xs text-zinc-300 font-semibold">
-                  Why are you reporting this post from @{post.username}?
-                </p>
-                <div className="space-y-1.5 max-h-60 overflow-y-auto no-scrollbar pr-1">
+                <div>
+                  <p className="text-xs text-zinc-200 font-semibold">
+                    Why are you reporting this post from @{post.username}?
+                  </p>
+                  <p className="text-[11px] text-zinc-400 mt-0.5">
+                    Your report is anonymous. If someone is in immediate danger, call local emergency services.
+                  </p>
+                </div>
+                <div className="space-y-1.5 max-h-52 overflow-y-auto no-scrollbar pr-1">
                   {REPORT_REASONS.map((reason) => (
                     <button
                       key={reason}
@@ -597,6 +619,21 @@ export const PostCard: React.FC<PostCardProps> = ({
                   ))}
                 </div>
 
+                {selectedReportReason && (
+                  <div className="pt-1">
+                    <label className="text-[11px] font-medium text-zinc-400 block mb-1">
+                      Additional details (optional):
+                    </label>
+                    <textarea
+                      value={reportDetails}
+                      onChange={(e) => setReportDetails(e.target.value)}
+                      placeholder="Add any context to help our moderators..."
+                      rows={2}
+                      className="w-full bg-zinc-800/80 border border-zinc-700/70 rounded-xl p-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 resize-none"
+                    />
+                  </div>
+                )}
+
                 <div className="pt-2 border-t border-zinc-800 flex gap-2">
                   <button
                     type="button"
@@ -609,7 +646,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                     type="button"
                     disabled={!selectedReportReason}
                     onClick={() => setIsReportSubmitted(true)}
-                    className="flex-1 py-2 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-indigo-600 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity"
+                    className="flex-1 py-2 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-indigo-600 rounded-xl disabled:opacity-40 disabled:cursor-not-allowed hover:opacity-90 transition-opacity shadow-lg"
                   >
                     Submit Report
                   </button>

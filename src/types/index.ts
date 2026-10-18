@@ -9,6 +9,7 @@ export interface AppUser {
   followersCount: number;
   followingCount: number;
   blockedUsers?: string[];
+  isVerified?: boolean;
 }
 
 export interface CommentItem {
@@ -18,6 +19,7 @@ export interface CommentItem {
   avatar: string;
   text: string;
   createdAt: string;
+  isVerified?: boolean;
 }
 
 export interface Post {
@@ -36,6 +38,7 @@ export interface Post {
   createdAt: number | any; // timestamp
   isLocalOnly?: boolean;
   mediaType?: 'image' | 'video';
+  isVerified?: boolean;
 }
 
 export interface Story {
@@ -50,6 +53,14 @@ export interface Story {
   timestamp: string;
   hasSeen?: boolean;
   mediaType?: 'image' | 'video';
+  isVerified?: boolean;
+  mentionTag?: string;
+  sharedReel?: {
+    id: string;
+    username: string;
+    caption?: string;
+    videoUrl?: string;
+  };
 }
 
 export interface Reel {

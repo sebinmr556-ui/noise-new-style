@@ -9,6 +9,7 @@ import {
   collection, 
   addDoc, 
   getDoc,
+  getDocs,
   setDoc,
   arrayUnion,
   query, 
@@ -41,6 +42,7 @@ import { VoiceRoomMiniPlayer } from './components/VoiceRoomMiniPlayer';
 import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { TopLoadingBar } from './components/TopLoadingBar';
+import { PullToRefresh } from './components/PullToRefresh';
 import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock } from 'lucide-react';
 
 const fileToBase64 = (file: File): Promise<string> => {
@@ -98,6 +100,7 @@ export default function App() {
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
+  const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
 
   // New States for Menu, Coins, and Private Account
   const [coinsBalance, setCoinsBalance] = useState<number>(150);
@@ -105,8 +108,87 @@ export default function App() {
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
 
+const DEFAULT_ROOMS: VoiceRoom[] = [
+  {
+    id: 'room-lounge-1',
+    title: 'Late Night Chill & Lofi ☕️',
+    topic: 'Casual Hangout & Music',
+    hostUid: 'host-maya',
+    hostUsername: 'maya_beats',
+    hostDisplayName: 'Maya Beats',
+    hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+    speakers: [
+      {
+        uid: 'host-maya',
+        username: 'maya_beats',
+        displayName: 'Maya Beats',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+        isHost: true,
+        isSpeaker: true,
+        isMuted: false,
+        isSpeaking: true,
+        joinedAt: Date.now() - 3600000,
+        seatNumber: 0,
+      },
+      {
+        uid: 'user-kai',
+        username: 'kai_dj',
+        displayName: 'Kai Music',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
+        isSpeaker: true,
+        isMuted: false,
+        isSpeaking: false,
+        joinedAt: Date.now() - 1800000,
+        seatNumber: 1,
+      }
+    ],
+    listeners: [
+      {
+        uid: 'user-sam',
+        username: 'sam_travels',
+        displayName: 'Sam R.',
+        joinedAt: Date.now() - 900000,
+      }
+    ],
+    tags: ['Music', 'Lofi', 'Chill'],
+    ambientVibe: 'lofi',
+    isLive: true,
+    createdAt: Date.now() - 3600000,
+    slotLikes: { 0: 24, 1: 18 },
+  },
+  {
+    id: 'room-founders-2',
+    title: 'Creators & Tech Talk 🚀',
+    topic: 'App Design & Building in Public',
+    hostUid: 'host-dev',
+    hostUsername: 'alex_codes',
+    hostDisplayName: 'Alex C.',
+    hostAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+    speakers: [
+      {
+        uid: 'host-dev',
+        username: 'alex_codes',
+        displayName: 'Alex C.',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+        isHost: true,
+        isSpeaker: true,
+        isMuted: false,
+        isSpeaking: false,
+        joinedAt: Date.now() - 7200000,
+        seatNumber: 0,
+      }
+    ],
+    listeners: [],
+    tags: ['Tech', 'Design', 'Startup'],
+    ambientVibe: 'none',
+    isLive: true,
+    createdAt: Date.now() - 7200000,
+    slotLikes: { 0: 42 },
+  }
+];
+
   // Voice Chatrooms State
-  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
+  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(DEFAULT_ROOMS);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
   const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(false);
@@ -303,10 +385,11 @@ export default function App() {
     setPosts((prev) =>
       prev.map((p) => {
         if (p.id === postId) {
-          const saved = p.savedBy ? p.savedBy.includes(currentUser.uid) : false;
-          const newSavedBy = saved
-            ? p.savedBy.filter((id) => id !== currentUser.uid)
-            : [...(p.savedBy || []), currentUser.uid];
+          const currentSaved = p.savedBy || [];
+          const isSaved = currentSaved.includes(currentUser.uid);
+          const newSavedBy = isSaved
+            ? currentSaved.filter((id) => id !== currentUser.uid)
+            : [...currentSaved, currentUser.uid];
           return { ...p, savedBy: newSavedBy };
         }
         return p;
@@ -513,6 +596,32 @@ export default function App() {
     setVoiceRooms((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
   };
 
+  const handleOpenChatroomFromStory = (targetUsername?: string) => {
+    setActiveStoryIndex(null);
+    if (targetUsername) {
+      const match = voiceRooms.find(
+        (r) =>
+          r.isLive &&
+          (r.hostUsername?.toLowerCase() === targetUsername.toLowerCase() ||
+            r.speakers?.some((s) => s.username?.toLowerCase() === targetUsername.toLowerCase()))
+      );
+      if (match) {
+        handleJoinVoiceRoom(match);
+        return;
+      }
+    }
+
+    if (voiceRooms.length > 0) {
+      setIsVoiceRoomsListOpen(true);
+    } else {
+      if (!currentUser) {
+        setIsLoginModalOpen(true);
+        return;
+      }
+      setIsCreateVoiceRoomOpen(true);
+    }
+  };
+
   const handleTabChange = (tab: NavTab) => {
     if (!currentUser && (tab === 'upload' || tab === 'profile')) {
       setIsLoginModalOpen(true);
@@ -520,6 +629,44 @@ export default function App() {
     }
     setActiveTab(tab);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleRefreshFeed = async () => {
+    setIsRefreshingFeed(true);
+    setIsTopLoading(true);
+    try {
+      if (isFirebaseConfigured && db) {
+        const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+        const snap = await getDocs(postsQuery);
+        const firestorePosts: Post[] = [];
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          firestorePosts.push({
+            id: docSnap.id,
+            uid: data.uid || 'anon',
+            username: data.username || 'user',
+            avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
+            image: data.image,
+            caption: data.caption || '',
+            location: data.location || '',
+            filter: data.filter || '',
+            likes: data.likes || 0,
+            likedBy: Array.isArray(data.likedBy) ? data.likedBy : [],
+            savedBy: Array.isArray(data.savedBy) ? data.savedBy : [],
+            comments: Array.isArray(data.comments) ? data.comments : [],
+            createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : (data.createdAt || Date.now()),
+          });
+        });
+        setPosts(firestorePosts);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      }
+    } catch (err) {
+      console.debug('Refresh error:', err);
+    } finally {
+      setIsRefreshingFeed(false);
+      setIsTopLoading(false);
+    }
   };
 
   const blockedUids = currentUser?.blockedUsers || [];
@@ -568,51 +715,68 @@ export default function App() {
 
         <main className="flex-1">
           {activeTab === 'home' && (
-            <div>
-              <StoriesBar
-                stories={visibleStories}
-                currentUser={currentUser}
-                onOpenStory={(index) => setActiveStoryIndex(index)}
-                onAddStory={handleAddUserStory}
-              />
+            <PullToRefresh onRefresh={handleRefreshFeed} isRefreshing={isRefreshingFeed}>
+              <div>
+                <StoriesBar
+                  stories={visibleStories}
+                  currentUser={currentUser}
+                  onOpenStory={(index) => setActiveStoryIndex(index)}
+                  onAddStory={handleAddUserStory}
+                />
 
-              <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
-                {isLoadingPosts ? (
-                  <div className="flex flex-col items-center justify-center py-24 text-zinc-400 gap-2">
-                    <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
-                    <span className="text-xs">Connecting to Noise...</span>
-                  </div>
-                ) : visiblePosts.length === 0 ? (
-                  <div className="text-center py-24 px-4 text-zinc-400">
-                    <p className="text-base font-bold text-white">No posts yet</p>
-                    <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-                      Be the first to share a moment! Apply filters and post.
-                    </p>
-                    <button
-                      onClick={() => handleTabChange('upload')}
-                      className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
-                    >
-                      Create First Post
-                    </button>
-                  </div>
-                ) : (
-                  visiblePosts.map((post) => (
-                    <PostCard
-                      key={post.id}
-                      post={post}
-                      currentUser={currentUser}
-                      onLikeToggle={handleLikeToggle}
-                      onSaveToggle={handleSaveToggle}
-                      onOpenComments={(p) => setActiveCommentPost(p)}
-                      onQuickComment={handleAddComment}
-                      onDeletePost={handleDeletePost}
-                      onBlockUser={handleBlockUser}
-                      onRequireLogin={() => setIsLoginModalOpen(true)}
-                    />
-                  ))
-                )}
+                {/* Live Voice Chatrooms Carousel */}
+                <LiveVoiceRoomsBar
+                  rooms={voiceRooms}
+                  currentUser={currentUser}
+                  onOpenCreateRoom={() => {
+                    if (!currentUser) {
+                      setIsLoginModalOpen(true);
+                      return;
+                    }
+                    setIsCreateVoiceRoomOpen(true);
+                  }}
+                  onJoinRoom={handleJoinVoiceRoom}
+                  onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)}
+                />
+
+                <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
+                  {isLoadingPosts ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-zinc-400 gap-2">
+                      <Loader2 className="w-6 h-6 animate-spin text-rose-500" />
+                      <span className="text-xs">Connecting to Noise...</span>
+                    </div>
+                  ) : visiblePosts.length === 0 ? (
+                    <div className="text-center py-24 px-4 text-zinc-400">
+                      <p className="text-base font-bold text-white">No posts yet</p>
+                      <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
+                        Be the first to share a moment! Apply filters and post.
+                      </p>
+                      <button
+                        onClick={() => handleTabChange('upload')}
+                        className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
+                      >
+                        Create First Post
+                      </button>
+                    </div>
+                  ) : (
+                    visiblePosts.map((post) => (
+                      <PostCard
+                        key={post.id}
+                        post={post}
+                        currentUser={currentUser}
+                        onLikeToggle={handleLikeToggle}
+                        onSaveToggle={handleSaveToggle}
+                        onOpenComments={(p) => setActiveCommentPost(p)}
+                        onQuickComment={handleAddComment}
+                        onDeletePost={handleDeletePost}
+                        onBlockUser={handleBlockUser}
+                        onRequireLogin={() => setIsLoginModalOpen(true)}
+                      />
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
+            </PullToRefresh>
           )}
 
           {activeTab === 'search' && (
@@ -765,6 +929,56 @@ export default function App() {
             onClose={() => setActiveStoryIndex(null)}
             onStorySeen={handleStorySeen}
             onDeleteStory={handleDeleteStory}
+            onOpenDirectChat={() => setIsDirectModalOpen(true)}
+            onOpenChatroom={handleOpenChatroomFromStory}
+          />
+        )}
+
+        {/* Live Voice Chatroom Modals */}
+        {activeVoiceRoom && isVoiceRoomModalOpen && (
+          <VoiceRoomModal
+            room={activeVoiceRoom}
+            currentUser={currentUser}
+            isOpen={isVoiceRoomModalOpen}
+            onMinimize={() => setIsVoiceRoomModalOpen(false)}
+            onLeaveRoom={handleLeaveVoiceRoom}
+            onUpdateRoom={handleUpdateActiveRoom}
+            onDeleteRoom={handleDeleteVoiceRoom}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+          />
+        )}
+
+        {isCreateVoiceRoomOpen && (
+          <CreateVoiceRoomModal
+            isOpen={isCreateVoiceRoomOpen}
+            onClose={() => setIsCreateVoiceRoomOpen(false)}
+            currentUser={currentUser}
+            onCreateRoom={handleCreateVoiceRoom}
+          />
+        )}
+
+        {isVoiceRoomsListOpen && (
+          <VoiceRoomsListModal
+            isOpen={isVoiceRoomsListOpen}
+            rooms={voiceRooms}
+            currentUser={currentUser}
+            onClose={() => setIsVoiceRoomsListOpen(false)}
+            onJoinRoom={handleJoinVoiceRoom}
+            onOpenCreateRoom={() => {
+              setIsVoiceRoomsListOpen(false);
+              setIsCreateVoiceRoomOpen(true);
+            }}
+            onDeleteRoom={handleDeleteVoiceRoom}
+          />
+        )}
+
+        {activeVoiceRoom && !isVoiceRoomModalOpen && (
+          <VoiceRoomMiniPlayer
+            room={activeVoiceRoom}
+            currentUser={currentUser}
+            onExpand={() => setIsVoiceRoomModalOpen(true)}
+            onLeave={handleLeaveVoiceRoom}
+            onUpdateRoom={handleUpdateActiveRoom}
           />
         )}
 
