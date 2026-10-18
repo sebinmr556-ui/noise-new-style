@@ -1,5 +1,5 @@
 import React from 'react';
-import { Heart, Send, LogIn, LogOut, Coins, Menu } from 'lucide-react';
+import { Heart, MessageCircle, LogIn, LogOut, Coins, Menu, Radio } from 'lucide-react';
 import { AppUser } from '../types';
 
 interface HeaderProps {
@@ -14,6 +14,7 @@ interface HeaderProps {
   onOpenMenu?: () => void;
   onOpenCoins?: () => void;
   unreadCount?: number;
+  hasActiveLiveRoom?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -23,10 +24,12 @@ export const Header: React.FC<HeaderProps> = ({
   onSignOut,
   onOpenDirect,
   onOpenNotifications,
+  onOpenVoiceRooms,
   onOpenAdmin,
   onOpenMenu,
   onOpenCoins,
   unreadCount = 0,
+  hasActiveLiveRoom = false,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800/80 px-4 h-14 flex items-center justify-between">
@@ -57,33 +60,53 @@ export const Header: React.FC<HeaderProps> = ({
         )}
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-2 sm:gap-2.5">
+        {/* Top Right Chatroom Icon */}
+        {onOpenVoiceRooms && (
+          <button
+            onClick={onOpenVoiceRooms}
+            className="relative p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-full transition-all group"
+            title="Voice Chatrooms"
+            type="button"
+          >
+            <Radio className="w-5 h-5 text-rose-500 animate-pulse group-hover:scale-110 transition-transform" />
+            {hasActiveLiveRoom && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-zinc-950 animate-ping" />
+            )}
+          </button>
+        )}
+
+        {/* Notifications */}
         <button
           onClick={onOpenNotifications}
-          className="relative p-1.5 text-zinc-300 hover:text-white transition-colors"
+          className="relative p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-full transition-colors"
           title="Notifications"
           type="button"
         >
-          <Heart className="w-6 h-6 stroke-[1.8]" />
+          <Heart className="w-5 h-5 stroke-[1.8] hover:text-rose-500 transition-colors" />
           {unreadCount > 0 && (
             <span className="absolute top-1 right-1 w-2 h-2 bg-[#ff3040] rounded-full ring-2 ring-zinc-950"></span>
           )}
         </button>
 
+        {/* Direct Messages: Changed flight icon to message icon */}
         <button
           onClick={onOpenDirect}
-          className="p-1.5 text-zinc-300 hover:text-white transition-colors relative"
+          className="p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-full transition-colors relative"
           title="Direct Messages"
           type="button"
         >
-          <Send className="w-6 h-6 stroke-[1.8] -rotate-12" />
+          <MessageCircle className="w-5 h-5 stroke-[1.8]" />
+          <span className="absolute top-1 right-0.5 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-gradient-to-r from-rose-500 to-purple-600 text-[9px] font-bold text-white ring-2 ring-zinc-950 shadow-sm">
+            2
+          </span>
         </button>
 
         {/* 3-Line Hamburger Menu Button */}
         {onOpenMenu && (
           <button
             onClick={onOpenMenu}
-            className="p-1.5 text-zinc-300 hover:text-white transition-colors"
+            className="p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-full transition-colors"
             title="Menu"
             type="button"
           >

@@ -1,12 +1,36 @@
 import React, { useState, useRef } from 'react';
-import { Plus, Grid, Bookmark, Film, Heart, MessageCircle, Settings, ExternalLink, User, Trash2, Camera, X } from 'lucide-react';
-import { AppUser, Post } from '../types';
+import { 
+  Plus, 
+  Grid, 
+  Bookmark, 
+  Film, 
+  Heart, 
+  MessageCircle, 
+  Settings, 
+  ExternalLink, 
+  User, 
+  Trash2, 
+  Camera, 
+  X,
+  Copy,
+  Check,
+  UserCheck,
+  UserPlus,
+  Users,
+  Search,
+  Fingerprint
+} from 'lucide-react';
+import { AppUser, Post, PublicUserProfile } from '../types';
 import { EditProfileModal } from './EditProfileModal';
+import { getAllDiscoverableUsers } from '../data/usersData';
 
 interface ProfileViewProps {
   currentUser: AppUser | null;
   posts: Post[];
   savedPosts: Post[];
+  followingList?: string[];
+  onFollowToggle?: (user: PublicUserProfile | string) => void;
+  onSelectUser?: (user: PublicUserProfile) => void;
   onUpdateAvatar: (dataUrl: string) => void;
   onRemoveAvatar: () => void;
   onUpdateProfile: (updates: {
@@ -24,6 +48,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   currentUser,
   posts,
   savedPosts,
+  followingList = [],
+  onFollowToggle,
+  onSelectUser,
   onUpdateAvatar,
   onRemoveAvatar,
   onUpdateProfile,
@@ -35,6 +62,9 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [isEditing, setIsEditing] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [copiedMyId, setCopiedMyId] = useState(false);
+  const [showFollowListModal, setShowFollowListModal] = useState<'following' | 'followers' | null>(null);
+  const [followSearchQuery, setFollowSearchQuery] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!currentUser) {
@@ -170,24 +200,64 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
 
           {/* Stats Bar */}
           <div className="flex flex-1 justify-around text-center">
-            <div className="cursor-pointer">
+            <div className="cursor-pointer hover:opacity-80 transition-opacity">
               <div className="text-base font-bold text-white">{userPosts.length}</div>
               <div className="text-xs text-zinc-400 font-normal">posts</div>
             </div>
-            <div className="cursor-pointer">
-              <div className="text-base font-bold text-white">{currentUser.followersCount || 0}</div>
-              <div className="text-xs text-zinc-400 font-normal">followers</div>
+            <div 
+              onClick={() => setShowFollowListModal('followers')}
+              className="cursor-pointer hover:opacity-80 transition-opacity group"
+              title="View Followers"
+            >
+              <div className="text-base font-bold text-white group-hover:text-purple-300 transition-colors">
+                {currentUser.followersCount || 0}
+              </div>
+              <div className="text-xs text-zinc-400 font-normal group-hover:text-zinc-200">followers</div>
             </div>
-            <div className="cursor-pointer">
-              <div className="text-base font-bold text-white">{currentUser.followingCount || 0}</div>
-              <div className="text-xs text-zinc-400 font-normal">following</div>
+            <div 
+              onClick={() => setShowFollowListModal('following')}
+              className="cursor-pointer hover:opacity-80 transition-opacity group"
+              title="View Following list"
+            >
+              <div className="text-base font-bold text-white group-hover:text-purple-300 transition-colors">
+                {followingList.length > 0 ? followingList.length : (currentUser.followingCount || 0)}
+              </div>
+              <div className="text-xs text-zinc-400 font-normal group-hover:text-zinc-200">following</div>
             </div>
           </div>
         </div>
 
-        {/* Bio Section */}
+        {/* Bio Section with User ID Badge */}
         <div className="mt-3.5 space-y-1">
-          <h2 className="text-sm font-bold text-white">{currentUser.displayName}</h2>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h2 className="text-sm font-bold text-white">{currentUser.displayName}</h2>
+            {currentUser.isVerified && (
+              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 text-white" title="Verified Creator">
+                <Check className="w-2 h-2 stroke-[3]" />
+              </span>
+            )}
+            
+            {/* User ID Tag */}
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(currentUser.uid);
+                setCopiedMyId(true);
+                setTimeout(() => setCopiedMyId(false), 2000);
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-zinc-900 hover:bg-zinc-800 text-[10px] font-mono text-purple-300 border border-purple-500/30 transition-colors ml-1 cursor-pointer"
+              title="Click to copy your unique User ID"
+              type="button"
+            >
+              <Fingerprint className="w-3 h-3 text-purple-400" />
+              <span>ID: {currentUser.uid}</span>
+              {copiedMyId ? (
+                <Check className="w-2.5 h-2.5 text-emerald-400" />
+              ) : (
+                <Copy className="w-2.5 h-2.5 text-zinc-400" />
+              )}
+            </button>
+          </div>
+
           <p className="text-xs text-zinc-400 font-medium">@{currentUser.username}</p>
           <p className="text-xs text-zinc-300 whitespace-pre-line leading-relaxed">
             {currentUser.bio || 'Digital Creator ✨\nNoise App Official 🚀'}
@@ -423,6 +493,178 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           onRemoveAvatar={onRemoveAvatar}
           onSaveProfile={onUpdateProfile}
         />
+      )}
+
+      {/* Followers & Following List Modal */}
+      {showFollowListModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[80vh]">
+            <div className="px-4 py-3.5 border-b border-zinc-800 flex items-center justify-between bg-zinc-950 sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-white capitalize">
+                  {showFollowListModal === 'following' ? `Following (${followingList.length})` : 'Followers'}
+                </h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFollowListModal(null);
+                  setFollowSearchQuery('');
+                }}
+                className="p-1.5 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-900 transition-colors"
+                type="button"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Search Input within following/followers */}
+            <div className="p-3 border-b border-zinc-800/60 bg-zinc-950">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-zinc-500 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder="Search by User ID or username..."
+                  value={followSearchQuery}
+                  onChange={(e) => setFollowSearchQuery(e.target.value)}
+                  className="w-full bg-zinc-900 text-xs text-zinc-100 placeholder-zinc-500 pl-8 pr-3 py-2 rounded-xl border border-zinc-800 focus:outline-none focus:border-purple-500/80"
+                />
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
+              {(() => {
+                const allDiscovered = getAllDiscoverableUsers(posts);
+                const q = followSearchQuery.toLowerCase().trim();
+
+                let listToShow: PublicUserProfile[] = [];
+
+                if (showFollowListModal === 'following') {
+                  listToShow = followingList.map((idOrUsername) => {
+                    const found = allDiscovered.find(
+                      (u) =>
+                        u.uid.toLowerCase() === idOrUsername.toLowerCase() ||
+                        u.username.toLowerCase() === idOrUsername.toLowerCase() ||
+                        u.userId.toLowerCase() === idOrUsername.toLowerCase()
+                    );
+                    if (found) return found;
+                    return {
+                      uid: idOrUsername,
+                      userId: idOrUsername,
+                      username: idOrUsername.replace(/^usr_|^id_/, ''),
+                      displayName: idOrUsername.replace(/_/g, ' '),
+                      avatar: '',
+                      followersCount: 1,
+                      followingCount: 0,
+                    };
+                  });
+                } else {
+                  // Followers list
+                  listToShow = allDiscovered.slice(0, 4);
+                }
+
+                if (q) {
+                  listToShow = listToShow.filter(
+                    (u) =>
+                      u.username.toLowerCase().includes(q) ||
+                      u.displayName.toLowerCase().includes(q) ||
+                      u.userId.toLowerCase().includes(q) ||
+                      u.uid.toLowerCase().includes(q)
+                  );
+                }
+
+                if (listToShow.length === 0) {
+                  return (
+                    <div className="py-12 text-center text-zinc-500 text-xs">
+                      <Users className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
+                      <p className="font-semibold text-zinc-400">
+                        {q ? `No accounts matching "${q}"` : showFollowListModal === 'following' ? "You aren't following anyone yet" : "No followers yet"}
+                      </p>
+                      {showFollowListModal === 'following' && !q && (
+                        <p className="text-[11px] text-zinc-500 mt-1">
+                          Explore creators and search by User ID to follow people!
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
+
+                return listToShow.map((user) => {
+                  const isFollowingThis = followingList.some(
+                    (f) =>
+                      f.toLowerCase() === user.username.toLowerCase() ||
+                      f.toLowerCase() === user.uid.toLowerCase() ||
+                      f.toLowerCase() === user.userId.toLowerCase()
+                  );
+
+                  return (
+                    <div
+                      key={user.uid || user.username}
+                      onClick={() => {
+                        onSelectUser?.(user);
+                        setShowFollowListModal(null);
+                      }}
+                      className="p-2.5 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800/70 flex items-center justify-between gap-3 cursor-pointer group transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center flex-none">
+                          <img
+                            src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=3a1af2&color=fff`}
+                            alt={user.displayName}
+                            className="w-full h-full rounded-full object-cover bg-zinc-950 p-[1px]"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs font-bold text-white group-hover:text-purple-300 transition-colors truncate">
+                              {user.displayName}
+                            </span>
+                            {user.isVerified && (
+                              <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-blue-500 text-white">
+                                <Check className="w-2 h-2 stroke-[3]" />
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-zinc-400 font-mono">
+                            <span>@{user.username}</span>
+                            <span>•</span>
+                            <span className="text-purple-300">ID: {user.userId || user.uid}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onFollowToggle?.(user);
+                        }}
+                        className={`py-1 px-3 rounded-xl text-xs font-bold transition-all flex items-center gap-1 active:scale-95 ${
+                          isFollowingThis
+                            ? 'bg-zinc-800 hover:bg-zinc-750 text-zinc-300 border border-zinc-700/80 hover:text-rose-400'
+                            : 'bg-gradient-to-r from-rose-500 to-purple-600 hover:opacity-90 text-white shadow-xs'
+                        }`}
+                        type="button"
+                      >
+                        {isFollowingThis ? (
+                          <>
+                            <UserCheck className="w-3 h-3 text-emerald-400" />
+                            <span>Following</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="w-3 h-3" />
+                            <span>Follow</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

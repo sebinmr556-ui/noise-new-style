@@ -9,6 +9,20 @@ export interface AppUser {
   followersCount: number;
   followingCount: number;
   blockedUsers?: string[];
+  following?: string[]; // Array of followed user IDs or usernames
+  isVerified?: boolean;
+}
+
+export interface PublicUserProfile {
+  uid: string;
+  userId: string; // Explicit public User ID (e.g. noise_id or uid)
+  username: string;
+  displayName: string;
+  avatar: string;
+  bio?: string;
+  website?: string;
+  followersCount: number;
+  followingCount: number;
   isVerified?: boolean;
 }
 

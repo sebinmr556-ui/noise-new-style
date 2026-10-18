@@ -17,7 +17,10 @@ import {
   AlertCircle,
   X,
   UserX,
-  ShieldCheck
+  ShieldCheck,
+  UserPlus,
+  UserCheck,
+  Copy
 } from 'lucide-react';
 import { Post, AppUser } from '../types';
 import { isGlobalAdmin } from '../utils/admin';
@@ -25,10 +28,13 @@ import { isGlobalAdmin } from '../utils/admin';
 interface PostCardProps {
   post: Post;
   currentUser: AppUser | null;
+  isFollowing?: boolean;
   onLikeToggle: (postId: string) => void;
   onSaveToggle: (postId: string) => void;
   onOpenComments: (post: Post) => void;
   onQuickComment: (postId: string, text: string) => void;
+  onFollowToggle?: (userIdOrUsername: string) => void;
+  onSelectUser?: (username: string, uid?: string, avatar?: string) => void;
   onDeletePost?: (postId: string) => void;
   onBlockUser?: (userId: string) => void;
   onRequireLogin: () => void;
@@ -37,10 +43,13 @@ interface PostCardProps {
 export const PostCard: React.FC<PostCardProps> = ({
   post,
   currentUser,
+  isFollowing = false,
   onLikeToggle,
   onSaveToggle,
   onOpenComments,
   onQuickComment,
+  onFollowToggle,
+  onSelectUser,
   onDeletePost,
   onBlockUser,
   onRequireLogin,
@@ -248,7 +257,11 @@ export const PostCard: React.FC<PostCardProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between px-3.5 py-2.5">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center">
+          <div 
+            onClick={() => onSelectUser?.(post.username, post.uid, post.avatar)}
+            className="w-8 h-8 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
+            title={`View @${post.username}'s profile`}
+          >
             {post.avatar && !post.avatar.includes('unsplash.com') && !post.avatar.includes('ui-avatars.com') ? (
               <img
                 src={post.avatar}
@@ -262,10 +275,52 @@ export const PostCard: React.FC<PostCardProps> = ({
             )}
           </div>
           <div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-zinc-100 hover:underline cursor-pointer">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span 
+                onClick={() => onSelectUser?.(post.username, post.uid, post.avatar)}
+                className="text-xs font-bold text-zinc-100 hover:text-purple-300 transition-colors cursor-pointer"
+              >
                 {post.username}
               </span>
+
+              {post.isVerified && (
+                <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 text-white" title="Verified Creator">
+                  <Check className="w-2 h-2 stroke-[3]" />
+                </span>
+              )}
+
+              {/* Follow / Following button directly in post header for non-owners */}
+              {!isOwner && onFollowToggle && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!currentUser) {
+                      onRequireLogin();
+                      return;
+                    }
+                    onFollowToggle(post.uid || post.username);
+                  }}
+                  className={`ml-1 text-[11px] font-bold px-2 py-0.5 rounded-md transition-all flex items-center gap-1 active:scale-95 ${
+                    isFollowing
+                      ? 'bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-700/60'
+                      : 'text-white bg-gradient-to-r from-rose-500 to-purple-600 hover:opacity-90 shadow-xs'
+                  }`}
+                  type="button"
+                >
+                  {isFollowing ? (
+                    <>
+                      <UserCheck className="w-3 h-3 text-emerald-400" />
+                      <span>Following</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-3 h-3" />
+                      <span>Follow</span>
+                    </>
+                  )}
+                </button>
+              )}
+
               <span className="text-zinc-600 text-[10px]">•</span>
               <span className="text-[11px] text-zinc-400 font-normal">
                 {formatTime(post.createdAt)}
@@ -291,7 +346,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           </button>
 
           {showMenu && (
-            <div className="absolute right-0 top-8 z-30 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1.5 w-40 text-xs text-zinc-200 animate-in fade-in duration-150">
+            <div className="absolute right-0 top-8 z-30 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl py-1.5 w-44 text-xs text-zinc-200 animate-in fade-in duration-150">
               <button
                 onClick={handleCopyLink}
                 className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-800"
@@ -300,6 +355,52 @@ export const PostCard: React.FC<PostCardProps> = ({
                 {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <LinkIcon className="w-3.5 h-3.5" />}
                 <span>{copiedLink ? 'Copied link!' : 'Copy link'}</span>
               </button>
+
+              {/* View Profile */}
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  onSelectUser?.(post.username, post.uid, post.avatar);
+                }}
+                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-800"
+                type="button"
+              >
+                <User className="w-3.5 h-3.5 text-zinc-400" />
+                <span>View @{post.username}</span>
+              </button>
+
+              {/* Copy Author User ID */}
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  const idToCopy = post.uid || post.username;
+                  navigator.clipboard?.writeText(idToCopy);
+                }}
+                className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-800 font-mono text-[11px]"
+                type="button"
+              >
+                <Copy className="w-3.5 h-3.5 text-purple-400" />
+                <span>Copy User ID</span>
+              </button>
+
+              {/* Follow / Unfollow from menu */}
+              {!isOwner && onFollowToggle && (
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    if (!currentUser) {
+                      onRequireLogin();
+                      return;
+                    }
+                    onFollowToggle(post.uid || post.username);
+                  }}
+                  className="w-full px-3 py-2 text-left flex items-center gap-2 hover:bg-zinc-800 text-purple-300 font-semibold"
+                  type="button"
+                >
+                  {isFollowing ? <UserCheck className="w-3.5 h-3.5 text-emerald-400" /> : <UserPlus className="w-3.5 h-3.5" />}
+                  <span>{isFollowing ? `Unfollow @${post.username}` : `Follow @${post.username}`}</span>
+                </button>
+              )}
 
               <button
                 onClick={() => {

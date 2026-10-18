@@ -21,7 +21,9 @@ import {
   onSnapshot
 } from './firebase';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant } from './types';
+import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant, PublicUserProfile } from './types';
+import { UserProfileModal } from './components/UserProfileModal';
+import { getAllDiscoverableUsers } from './data/usersData';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
@@ -43,7 +45,7 @@ import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { TopLoadingBar } from './components/TopLoadingBar';
 import { PullToRefresh } from './components/PullToRefresh';
-import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock } from 'lucide-react';
+import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock, Radio, MessageCircle, Heart } from 'lucide-react';
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -97,6 +99,7 @@ export default function App() {
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
+  const [directTargetUsername, setDirectTargetUsername] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
@@ -107,6 +110,16 @@ export default function App() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+
+  // Follow / Unfollow System & User ID Profile Modal
+  const [followingList, setFollowingList] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('noise_following_list');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return ['maya_beats', 'alex_codes'];
+  });
+  const [selectedUserProfile, setSelectedUserProfile] = useState<PublicUserProfile | null>(null);
 
 const DEFAULT_ROOMS: VoiceRoom[] = [
   {
@@ -496,6 +509,67 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
     setCurrentUser((prev) => prev ? { ...prev, photoURL: '' } : null);
   };
 
+  const handleFollowToggle = (userOrId: PublicUserProfile | string) => {
+    if (!currentUser) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+    const targetKey = typeof userOrId === 'string'
+      ? userOrId.toLowerCase()
+      : (userOrId.username || userOrId.uid || userOrId.userId).toLowerCase();
+
+    setFollowingList((prev) => {
+      const isAlreadyFollowing = prev.some((f) => f.toLowerCase() === targetKey);
+      const updated = isAlreadyFollowing
+        ? prev.filter((f) => f.toLowerCase() !== targetKey)
+        : [...prev, targetKey];
+
+      try {
+        localStorage.setItem('noise_following_list', JSON.stringify(updated));
+      } catch {}
+
+      setCurrentUser((u) => {
+        if (!u) return null;
+        const newCount = Math.max(0, (u.followingCount || 0) + (isAlreadyFollowing ? -1 : 1));
+        const updatedUser = { ...u, followingCount: newCount, following: updated };
+        try {
+          localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
+        } catch {}
+        return updatedUser;
+      });
+
+      return updated;
+    });
+  };
+
+  const handleOpenUserProfile = (usernameOrUser: string | PublicUserProfile, uid?: string, avatar?: string) => {
+    if (typeof usernameOrUser === 'object' && usernameOrUser !== null) {
+      setSelectedUserProfile(usernameOrUser);
+      return;
+    }
+    const un = usernameOrUser;
+    const allUsers = getAllDiscoverableUsers(posts);
+    const found = allUsers.find(
+      (u) =>
+        u.username.toLowerCase() === un.toLowerCase() ||
+        (uid && u.uid.toLowerCase() === uid.toLowerCase())
+    );
+    if (found) {
+      setSelectedUserProfile(found);
+    } else {
+      setSelectedUserProfile({
+        uid: uid || `usr_${un}`,
+        userId: un.toLowerCase(),
+        username: un,
+        displayName: un,
+        avatar: avatar || '',
+        followersCount: 14,
+        followingCount: 5,
+        isVerified: false,
+      });
+    }
+  };
+
   const handleStorySeen = (storyId: string) => {
     setStories((prev) => prev.map((s) => (s.id === storyId ? { ...s, hasSeen: true } : s)));
   };
@@ -697,18 +771,60 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
             )}
           </div>
 
-          <div className="flex items-center gap-3">
-            <button onClick={() => setIsNotificationsOpen(true)} className="text-zinc-200 hover:text-white p-1">
-              <span className="sr-only">Notifications</span>
-              🔔
+          <div className="flex items-center gap-1 sm:gap-1.5">
+            {/* Top Right Voice & Group Chatroom Icon */}
+            <button
+              onClick={() => {
+                if (activeVoiceRoom) {
+                  setIsVoiceRoomModalOpen(true);
+                } else {
+                  setIsVoiceRoomsListOpen(true);
+                }
+              }}
+              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group flex items-center active:scale-95"
+              type="button"
+              title="Chatrooms & Voice Rooms"
+            >
+              <Radio className="w-5 h-5 text-rose-500 animate-pulse group-hover:scale-110 transition-transform" />
+              {voiceRooms.some((r) => r.isLive) && (
+                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500 border border-zinc-950"></span>
+                </span>
+              )}
             </button>
-            <button onClick={() => setIsDirectModalOpen(true)} className="text-zinc-200 hover:text-white p-1">
-              <span className="sr-only">Messages</span>
-              ✈️
+
+            {/* Notifications Button */}
+            <button
+              onClick={() => setIsNotificationsOpen(true)}
+              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95"
+              type="button"
+              title="Notifications"
+            >
+              <Heart className="w-5 h-5 group-hover:text-rose-500 group-hover:scale-110 transition-all" />
             </button>
+
+            {/* Direct Messages: Changed from flight icon to sleek message icon */}
+            <button
+              onClick={() => setIsDirectModalOpen(true)}
+              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
+              type="button"
+              title="Direct Messages & Inbox"
+            >
+              <MessageCircle className="w-5 h-5 group-hover:scale-110 group-hover:text-white transition-transform" />
+              <span className="absolute top-1 right-0.5 flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-gradient-to-r from-rose-500 to-purple-600 text-[9px] font-bold text-white ring-2 ring-zinc-950 shadow-sm animate-in zoom-in-75">
+                2
+              </span>
+            </button>
+
             {/* 3-Line Hamburger Menu Button */}
-            <button onClick={() => setIsMenuOpen(true)} className="text-zinc-200 hover:text-white p-1">
-              <Menu className="w-6 h-6" />
+            <button
+              onClick={() => setIsMenuOpen(true)}
+              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all active:scale-95"
+              type="button"
+              title="Menu & Settings"
+            >
+              <Menu className="w-5 h-5" />
             </button>
           </div>
         </header>
@@ -764,6 +880,13 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
                         key={post.id}
                         post={post}
                         currentUser={currentUser}
+                        isFollowing={followingList.some(
+                          (f) =>
+                            f.toLowerCase() === post.username.toLowerCase() ||
+                            (post.uid && f.toLowerCase() === post.uid.toLowerCase())
+                        )}
+                        onFollowToggle={handleFollowToggle}
+                        onSelectUser={handleOpenUserProfile}
                         onLikeToggle={handleLikeToggle}
                         onSaveToggle={handleSaveToggle}
                         onOpenComments={(p) => setActiveCommentPost(p)}
@@ -780,7 +903,15 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
           )}
 
           {activeTab === 'search' && (
-            <ExploreView allPosts={visiblePosts} onSelectPost={(post) => setSelectedDetailPost(post)} />
+            <ExploreView 
+              allPosts={visiblePosts} 
+              currentUser={currentUser}
+              followingList={followingList}
+              onFollowToggle={handleFollowToggle}
+              onSelectPost={(post) => setSelectedDetailPost(post)} 
+              onSelectUser={(user) => setSelectedUserProfile(user)}
+              onRequireLogin={() => setIsLoginModalOpen(true)}
+            />
           )}
 
           {activeTab === 'upload' && (
@@ -801,6 +932,9 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
               currentUser={currentUser}
               posts={posts}
               savedPosts={savedPosts}
+              followingList={followingList}
+              onFollowToggle={handleFollowToggle}
+              onSelectUser={(user) => setSelectedUserProfile(user)}
               onUpdateAvatar={handleUpdateAvatar}
               onRemoveAvatar={handleRemoveAvatar}
               onUpdateProfile={handleUpdateProfile}
@@ -1007,7 +1141,38 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
           />
         )}
 
-        <DirectMessagesModal isOpen={isDirectModalOpen} onClose={() => setIsDirectModalOpen(false)} currentUser={currentUser} />
+        {selectedUserProfile && (
+          <UserProfileModal
+            user={selectedUserProfile}
+            currentUser={currentUser}
+            posts={posts}
+            isFollowing={followingList.some(
+              (f) =>
+                f.toLowerCase() === selectedUserProfile.username.toLowerCase() ||
+                f.toLowerCase() === selectedUserProfile.uid.toLowerCase() ||
+                f.toLowerCase() === selectedUserProfile.userId.toLowerCase()
+            )}
+            onFollowToggle={handleFollowToggle}
+            onOpenDirect={(targetUsername) => {
+              setDirectTargetUsername(targetUsername);
+              setIsDirectModalOpen(true);
+            }}
+            onBlockUser={handleBlockUser}
+            onSelectPost={(post) => setSelectedDetailPost(post)}
+            onClose={() => setSelectedUserProfile(null)}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+          />
+        )}
+
+        <DirectMessagesModal 
+          isOpen={isDirectModalOpen} 
+          onClose={() => {
+            setIsDirectModalOpen(false);
+            setDirectTargetUsername(null);
+          }} 
+          currentUser={currentUser} 
+          initialTargetUsername={directTargetUsername}
+        />
         <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
         <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
       </div>
