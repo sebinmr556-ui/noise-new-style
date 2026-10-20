@@ -46,10 +46,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [copiedId, setCopiedId] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
+  const [showBlockConfirmModal, setShowBlockConfirmModal] = useState(false);
 
   if (!user) return null;
 
   const isMe = currentUser && (currentUser.uid === user.uid || currentUser.username.toLowerCase() === user.username.toLowerCase());
+  const isBlocked = !!currentUser?.blockedUsers?.some(
+    (id) =>
+      id === user.uid ||
+      id === user.userId ||
+      id.toLowerCase() === user.username.toLowerCase()
+  );
 
   // Filter posts by this user
   const userPosts = posts.filter(
@@ -128,15 +135,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   {!isMe && onBlockUser && (
                     <button
                       onClick={() => {
-                        onBlockUser(user.uid);
                         setShowOptions(false);
-                        onClose();
+                        if (!currentUser) {
+                          onRequireLogin();
+                          return;
+                        }
+                        if (isBlocked) {
+                          onBlockUser(user.uid);
+                        } else {
+                          setShowBlockConfirmModal(true);
+                        }
                       }}
-                      className="w-full px-4 py-2.5 text-left flex items-center gap-2.5 text-rose-400 hover:bg-rose-500/10 transition-colors border-t border-zinc-800/80"
+                      className="w-full px-4 py-2.5 text-left flex items-center gap-2.5 text-rose-400 hover:bg-rose-500/10 transition-colors border-t border-zinc-800/80 cursor-pointer"
                       type="button"
                     >
                       <UserX className="w-4 h-4" />
-                      <span>Block @{user.username}</span>
+                      <span>{isBlocked ? `Unblock @${user.username}` : `Block @${user.username}`}</span>
                     </button>
                   )}
                 </div>
@@ -232,40 +246,97 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
             {/* Action Buttons */}
             {!isMe ? (
-              <div className="flex items-center gap-2 mt-4">
-                <button
-                  onClick={handleFollowClick}
-                  className={`flex-1 py-2 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-98 ${
-                    isFollowing
-                      ? 'bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-700/80 hover:text-rose-400'
-                      : 'bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-95 text-white shadow-rose-500/20'
-                  }`}
-                  type="button"
-                >
-                  {isFollowing ? (
-                    <>
-                      <UserCheck className="w-4 h-4 text-emerald-400" />
-                      <span>Following</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="w-4 h-4" />
-                      <span>Follow</span>
-                    </>
-                  )}
-                </button>
+              <div className="space-y-2.5 mt-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleFollowClick}
+                    disabled={isBlocked}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-98 ${
+                      isBlocked
+                        ? 'opacity-40 cursor-not-allowed bg-zinc-900 text-zinc-500 border border-zinc-800'
+                        : isFollowing
+                        ? 'bg-zinc-900 hover:bg-zinc-850 text-zinc-300 border border-zinc-700/80 hover:text-rose-400'
+                        : 'bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-95 text-white shadow-rose-500/20'
+                    }`}
+                    type="button"
+                  >
+                    {isFollowing ? (
+                      <>
+                        <UserCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Following</span>
+                      </>
+                    ) : (
+                      <>
+                        <UserPlus className="w-4 h-4" />
+                        <span>Follow</span>
+                      </>
+                    )}
+                  </button>
 
-                <button
-                  onClick={() => {
-                    onOpenDirect(user.username);
-                    onClose();
-                  }}
-                  className="flex-1 py-2 px-4 rounded-xl text-xs font-bold bg-zinc-900 hover:bg-zinc-850 text-zinc-200 border border-zinc-800 transition-colors flex items-center justify-center gap-1.5"
-                  type="button"
-                >
-                  <MessageCircle className="w-4 h-4 text-zinc-400" />
-                  <span>Message</span>
-                </button>
+                  <button
+                    onClick={() => {
+                      if (isBlocked) return;
+                      onOpenDirect(user.username);
+                      onClose();
+                    }}
+                    disabled={isBlocked}
+                    className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold border transition-colors flex items-center justify-center gap-1.5 ${
+                      isBlocked
+                        ? 'opacity-40 cursor-not-allowed bg-zinc-900 text-zinc-500 border-zinc-800'
+                        : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-200 border-zinc-800'
+                    }`}
+                    type="button"
+                  >
+                    <MessageCircle className="w-4 h-4 text-zinc-400" />
+                    <span>Message</span>
+                  </button>
+
+                  {/* Block User Button */}
+                  {onBlockUser && (
+                    <button
+                      onClick={() => {
+                        if (!currentUser) {
+                          onRequireLogin();
+                          return;
+                        }
+                        if (isBlocked) {
+                          onBlockUser(user.uid);
+                        } else {
+                          setShowBlockConfirmModal(true);
+                        }
+                      }}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer ${
+                        isBlocked
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/40 hover:bg-rose-500/25'
+                          : 'bg-zinc-900 hover:bg-rose-500/10 text-zinc-300 hover:text-rose-400 border-zinc-800 hover:border-rose-500/30'
+                      }`}
+                      type="button"
+                      title={isBlocked ? 'Click to unblock user' : 'Block this user'}
+                    >
+                      <UserX className="w-3.5 h-3.5 text-rose-400" />
+                      <span>{isBlocked ? 'Blocked' : 'Block User'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Restricted interactions banner if blocked */}
+                {isBlocked && (
+                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-rose-950/30 border border-rose-900/40 text-[11px] text-rose-200 animate-in fade-in">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <UserX className="w-4 h-4 text-rose-400 flex-none" />
+                      <span className="truncate">You blocked @{user.username}. Interactions restricted.</span>
+                    </div>
+                    {onBlockUser && (
+                      <button
+                        onClick={() => onBlockUser(user.uid)}
+                        className="text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-2 flex-none cursor-pointer"
+                        type="button"
+                      >
+                        Unblock
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="mt-4 py-2 px-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-center text-xs text-zinc-400">
@@ -277,11 +348,21 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Posts Grid Header */}
           <div className="flex items-center justify-center gap-2 py-2.5 border-b border-zinc-800 text-xs font-bold text-zinc-300">
             <Grid className="w-3.5 h-3.5 text-white" />
-            <span>POSTS ({userPosts.length})</span>
+            <span>POSTS ({isBlocked ? 0 : userPosts.length})</span>
           </div>
 
           {/* Posts */}
-          {userPosts.length > 0 ? (
+          {isBlocked ? (
+            <div className="py-16 text-center text-zinc-500 text-xs px-4 animate-in fade-in">
+              <div className="w-12 h-12 rounded-full bg-zinc-900/90 border border-zinc-800 flex items-center justify-center mx-auto mb-3 text-rose-400">
+                <UserX className="w-6 h-6" />
+              </div>
+              <p className="font-bold text-zinc-300 text-sm mb-1">User is Blocked</p>
+              <p className="text-zinc-500 max-w-xs mx-auto">
+                Posts and stories from @{user.username} are hidden because you have blocked this account.
+              </p>
+            </div>
+          ) : userPosts.length > 0 ? (
             <div className="grid grid-cols-3 gap-1 p-1">
               {userPosts.map((post) => {
                 const isVideo =
@@ -339,6 +420,43 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* Block User Confirmation Modal */}
+      {showBlockConfirmModal && (
+        <div className="fixed inset-0 z-60 bg-black/85 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm w-full p-5 text-center shadow-2xl">
+            <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto mb-3">
+              <UserX className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-white mb-1.5">
+              Block @{user.username}?
+            </h3>
+            <p className="text-xs text-zinc-400 mb-5 leading-relaxed">
+              They will not be able to interact with you, message you, or see your activity. Their posts and stories will be hidden from your feed.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowBlockConfirmModal(false)}
+                className="flex-1 py-2.5 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBlockConfirmModal(false);
+                  if (onBlockUser) onBlockUser(user.uid);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow-lg shadow-rose-900/30 flex items-center justify-center gap-1.5"
+              >
+                <UserX className="w-3.5 h-3.5" />
+                <span>Block User</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

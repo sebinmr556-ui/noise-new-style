@@ -497,7 +497,35 @@ export default function App() {
 
   const handleBlockUser = async (targetUserId: string) => {
     if (!currentUser) return;
-    setCurrentUser((prev) => prev ? { ...prev, blockedUsers: [...(prev.blockedUsers || []), targetUserId] } : null);
+    const isCurrentlyBlocked = (currentUser.blockedUsers || []).includes(targetUserId);
+
+    const updatedBlocked = isCurrentlyBlocked
+      ? (currentUser.blockedUsers || []).filter((id) => id !== targetUserId)
+      : Array.from(new Set([...(currentUser.blockedUsers || []), targetUserId]));
+
+    setCurrentUser((prev) => (prev ? { ...prev, blockedUsers: updatedBlocked } : null));
+
+    if (!isCurrentlyBlocked) {
+      setFollowingList((prev) => {
+        const updated = prev.filter(
+          (f) => f.toLowerCase() !== targetUserId.toLowerCase()
+        );
+        try {
+          localStorage.setItem('noise_following_list', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
+    if (db && currentUser.uid) {
+      try {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          blockedUsers: updatedBlocked,
+        });
+      } catch (e) {
+        console.debug('Failed to sync blockedUsers to firestore', e);
+      }
+    }
   };
 
   const handleUpdateProfile = (updates: { displayName: string; username: string; bio: string; website?: string }) => {

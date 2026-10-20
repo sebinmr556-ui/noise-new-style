@@ -43,5 +43,31 @@ service cloud.firestore {
       // Only the author can delete their story
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
+
+    // WebRTC Calls & Real-Time Signaling
+    match /calls/{callId} {
+      allow read, write: if true;
+      match /{subcollection=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Direct Messages
+    match /direct_messages/{msgId} {
+      allow read, write: if true;
+    }
+
+    // Voice Chat Rooms
+    match /voice_rooms/{roomId} {
+      allow read, write: if true;
+      match /{subcollection=**} {
+        allow read, write: if true;
+      }
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read, write: if true;
+    }
   }
 }

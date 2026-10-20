@@ -21,6 +21,11 @@ import {
   Trash2,
   Sparkles,
   Volume2,
+  VolumeX,
+  Volume1,
+  AlertCircle,
+  Radio,
+  Activity,
   Copy,
   Bell,
   BellOff,
@@ -30,6 +35,12 @@ import { AppUser } from '../types';
 import { db, isFirebaseConfigured } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { isVerifiedUser } from '../utils/admin';
+import { 
+  WebRTCVoiceManager, 
+  WebRTCCallStatus, 
+  CallSessionData, 
+  getCallChannelId 
+} from '../utils/webrtcVoice';
 
 interface DirectMessagesModalProps {
   isOpen: boolean;
@@ -265,15 +276,23 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [threadSearchQuery, setThreadSearchQuery] = useState('');
   const [showThreadSearch, setShowThreadSearch] = useState(false);
 
-  // Call simulation state
+  // WebRTC Live Voice Chat state
   const [activeCall, setActiveCall] = useState<{
     type: 'audio' | 'video';
     user: ChatContact;
-    status: string;
+    status: WebRTCCallStatus;
     duration: number;
+    channelId: string;
   } | null>(null);
+  const [incomingCall, setIncomingCall] = useState<CallSessionData | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  const [speakerVolume, setSpeakerVolume] = useState(1);
+  const [isSpeakerMuted, setIsSpeakerMuted] = useState(false);
+  const [localAudioLevel, setLocalAudioLevel] = useState(0);
+  const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
+  const voiceManagerRef = useRef<WebRTCVoiceManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordTimerRef = useRef<any>(null);
@@ -317,19 +336,103 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [initialTargetUsername, isOpen]);
 
-  // Handle call timer
+  // Handle call timer for active connected calls
   useEffect(() => {
-    if (activeCall && activeCall.status === 'Connected') {
+    if (activeCall && activeCall.status === 'connected') {
       callTimerRef.current = setInterval(() => {
-        setActiveCall((prev) => prev ? { ...prev, duration: prev.duration + 1 } : null);
+        setActiveCall((prev) => (prev ? { ...prev, duration: prev.duration + 1 } : null));
       }, 1000);
       return () => clearInterval(callTimerRef.current);
     }
   }, [activeCall?.status]);
 
+  // Initialize and manage WebRTC voice chat manager
+  useEffect(() => {
+    const manager = new WebRTCVoiceManager({
+      onStatusChange: (newStatus) => {
+        setActiveCall((prev) => {
+          if (!prev) return null;
+          if (newStatus === 'ended' || newStatus === 'rejected') {
+            setTimeout(() => {
+              setActiveCall((curr) => (curr?.status === newStatus ? null : curr));
+            }, 1500);
+          }
+          return { ...prev, status: newStatus };
+        });
+      },
+      onError: (err) => {
+        setVoiceError(err);
+      },
+      onLocalAudioLevel: (lvl) => {
+        setLocalAudioLevel(lvl);
+      },
+      onRemoteAudioLevel: (lvl) => {
+        setRemoteAudioLevel(lvl);
+      },
+      onIncomingCall: (incoming) => {
+        const myHandle = (currentUser?.username || '').toLowerCase();
+        const myUid = currentUser?.uid || '';
+        const recHandle = (incoming.receiver.username || '').toLowerCase();
+        const recUid = incoming.receiver.uid || '';
+
+        if ((myHandle && recHandle === myHandle) || (myUid && recUid === myUid)) {
+          setIncomingCall(incoming);
+        }
+      },
+    });
+
+    voiceManagerRef.current = manager;
+
+    return () => {
+      manager.destroy();
+      voiceManagerRef.current = null;
+    };
+  }, [currentUser?.username, currentUser?.uid]);
+
+  // Firestore real-time incoming call listener
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !currentUser) return;
+    const myHandle = (currentUser.username || '').toLowerCase();
+
+    try {
+      const callsCol = collection(db, 'calls');
+      const q = query(callsCol);
+      const unsub = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added' || change.type === 'modified') {
+            const data = change.doc.data() as CallSessionData;
+            if (
+              data.status === 'calling' &&
+              data.receiver?.username?.toLowerCase() === myHandle &&
+              Date.now() - (data.createdAt || 0) < 60000 &&
+              (!activeCall || activeCall.status === 'ended')
+            ) {
+              setIncomingCall(data);
+            } else if (
+              incomingCall &&
+              incomingCall.id === data.id &&
+              (data.status === 'ended' || data.status === 'rejected')
+            ) {
+              setIncomingCall(null);
+            }
+          }
+        });
+      }, (e) => {
+        console.debug('Calls snapshot note:', e);
+      });
+
+      return () => unsub();
+    } catch (e) {
+      console.debug('Firestore incoming listener note:', e);
+    }
+  }, [currentUser?.username, activeCall?.status, incomingCall?.id]);
+
   if (!isOpen) return null;
 
   const handleSelectContact = (contact: ChatContact) => {
+    if (activeCall && activeCall.user.id !== contact.id) {
+      handleEndCall();
+    }
     setSelectedContact(contact);
     setShowThreadSearch(false);
     setThreadSearchQuery('');
@@ -566,22 +669,143 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setNewChatInput('');
   };
 
-  // Start call simulation
-  const startCall = (type: 'audio' | 'video') => {
+  // Real WebRTC Voice Call Functions
+  const startCall = async (type: 'audio' | 'video' = 'audio') => {
     if (!selectedContact) return;
-    setActiveCall({ type, user: selectedContact, status: 'Calling...', duration: 0 });
-    setTimeout(() => {
-      setActiveCall((prev) => prev ? { ...prev, status: 'Ringing...' } : null);
-      setTimeout(() => {
-        setActiveCall((prev) => prev ? { ...prev, status: 'Connected' } : null);
-      }, 2000);
-    }, 1500);
+    setVoiceError(null);
+
+    const caller = {
+      uid: currentUser?.uid || 'guest-user',
+      username: currentUser?.username || 'user',
+      displayName: currentUser?.displayName || currentUser?.username || 'User',
+      avatar: currentUser?.photoURL,
+    };
+
+    const receiver = {
+      uid: selectedContact.id,
+      username: selectedContact.username,
+      displayName: selectedContact.name,
+      avatar: selectedContact.avatar,
+    };
+
+    const channelId = getCallChannelId(caller.username, receiver.username);
+
+    setActiveCall({
+      type,
+      user: selectedContact,
+      status: 'calling',
+      duration: 0,
+      channelId,
+    });
+    setIsMuted(false);
+
+    try {
+      if (voiceManagerRef.current) {
+        await voiceManagerRef.current.startCall(caller, receiver);
+      }
+    } catch (err: any) {
+      console.warn('Call start error:', err);
+      setVoiceError(err.message || 'Microphone error or connection failed.');
+    }
+  };
+
+  const handleAcceptIncomingCall = async () => {
+    if (!incomingCall) return;
+    setVoiceError(null);
+
+    const callerHandle = incomingCall.caller.username;
+    let contact = contacts.find((c) => c.username.toLowerCase() === callerHandle.toLowerCase());
+    if (!contact) {
+      contact = {
+        id: incomingCall.caller.uid || `u-${callerHandle}`,
+        name: incomingCall.caller.displayName || callerHandle,
+        username: callerHandle,
+        avatar: incomingCall.caller.avatar || '',
+        lastMessage: 'Voice Call',
+        time: 'Just now',
+        unread: false,
+        online: true,
+        category: 'primary',
+      };
+      setContacts((prev) => [contact!, ...prev]);
+    }
+    setSelectedContact(contact);
+
+    setActiveCall({
+      type: 'audio',
+      user: contact,
+      status: 'connecting',
+      duration: 0,
+      channelId: incomingCall.channelId,
+    });
+
+    const callToAccept = incomingCall;
+    setIncomingCall(null);
+
+    try {
+      if (voiceManagerRef.current) {
+        await voiceManagerRef.current.acceptCall(callToAccept);
+      }
+    } catch (err: any) {
+      console.warn('Accept call error:', err);
+      setVoiceError(err.message || 'Failed to connect voice call.');
+    }
+  };
+
+  const handleRejectIncomingCall = async () => {
+    if (!incomingCall) return;
+    if (voiceManagerRef.current) {
+      await voiceManagerRef.current.rejectCall(incomingCall);
+    }
+    setIncomingCall(null);
+  };
+
+  const handleEndCall = async () => {
+    if (voiceManagerRef.current) {
+      await voiceManagerRef.current.endCall();
+    }
+    setActiveCall(null);
+    setVoiceError(null);
+    setLocalAudioLevel(0);
+    setRemoteAudioLevel(0);
+  };
+
+  const handleToggleMute = () => {
+    if (voiceManagerRef.current) {
+      const muted = voiceManagerRef.current.toggleMute();
+      setIsMuted(muted);
+    }
+  };
+
+  const handleToggleSpeaker = () => {
+    if (voiceManagerRef.current) {
+      if (isSpeakerMuted) {
+        voiceManagerRef.current.setVolume(speakerVolume || 1);
+        setIsSpeakerMuted(false);
+      } else {
+        voiceManagerRef.current.setVolume(0);
+        setIsSpeakerMuted(true);
+      }
+    }
+  };
+
+  const handleSpeakerVolumeChange = (vol: number) => {
+    setSpeakerVolume(vol);
+    setIsSpeakerMuted(vol === 0);
+    voiceManagerRef.current?.setVolume(vol);
   };
 
   const formatCallTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleCloseModal = () => {
+    if (activeCall) {
+      handleEndCall();
+    }
+    onClose();
   };
 
   const filteredContacts = contacts.filter((c) => {
@@ -630,7 +854,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   <Plus className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={onClose}
+                  onClick={handleCloseModal}
                   className="p-2 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-xl transition-colors"
                   type="button"
                   title="Close"
@@ -867,7 +1091,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 </div>
 
                 <button
-                  onClick={onClose}
+                  onClick={handleCloseModal}
                   className="p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors"
                   type="button"
                   title="Close"
@@ -896,6 +1120,28 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 )}
               </div>
             )}
+
+            {/* Live WebRTC Voice Chat Banner inside Chat Room */}
+            <div className="px-3.5 py-2 bg-gradient-to-r from-purple-950/40 via-zinc-900/90 to-indigo-950/40 border-b border-zinc-800/80 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-none" />
+                <span className="text-zinc-200 font-medium truncate text-[11px]">
+                  Free Live WebRTC Voice Chat
+                </span>
+                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-zinc-400 font-mono">
+                  Google STUN
+                </span>
+              </div>
+              <button
+                onClick={() => startCall('audio')}
+                className="px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer flex-none shadow-xs"
+                type="button"
+                title="Start Voice Chat with this user"
+              >
+                <Phone className="w-3 h-3 text-emerald-400" />
+                <span>Voice Call</span>
+              </button>
+            </div>
 
             {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-950">
@@ -1173,42 +1419,304 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           </div>
         )}
 
-        {/* ACTIVE AUDIO / VIDEO CALL OVERLAY */}
-        {activeCall && (
-          <div className="absolute inset-0 z-50 bg-zinc-950/95 backdrop-blur-md flex flex-col items-center justify-between p-8 text-center animate-in zoom-in-95 duration-200">
-            <div className="w-full flex justify-end">
-              <button onClick={() => setActiveCall(null)} className="text-zinc-400 hover:text-white p-2" type="button">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
+        {/* INCOMING WEBRTC VOICE CALL MODAL */}
+        {incomingCall && (
+          <div className="absolute inset-x-3 top-3 z-60 bg-zinc-900/95 border border-purple-500/50 shadow-2xl rounded-2xl p-3.5 sm:p-4 backdrop-blur-xl animate-in slide-in-from-top-4 duration-200">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="relative flex-none">
+                  {incomingCall.caller.avatar ? (
+                    <img
+                      src={incomingCall.caller.avatar}
+                      alt={incomingCall.caller.displayName}
+                      className="w-11 h-11 rounded-full object-cover ring-2 ring-purple-500 shadow-md"
+                    />
+                  ) : (
+                    <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-rose-500 via-purple-600 to-indigo-600 flex items-center justify-center text-white font-bold text-base ring-2 ring-purple-500 shadow-md">
+                      {incomingCall.caller.displayName?.charAt(0) || 'U'}
+                    </div>
+                  )}
+                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-zinc-950 animate-ping" />
+                </div>
 
-            <div className="space-y-4">
-              <div className="relative mx-auto w-24 h-24 flex justify-center">
-                <ContactAvatar contact={activeCall.user} size="xl" className="ring-4 ring-rose-500/50 shadow-2xl animate-pulse" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <Radio className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    <span className="text-[10px] uppercase font-bold text-purple-400 tracking-wider">
+                      Incoming Voice Call
+                    </span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                    {incomingCall.caller.displayName || incomingCall.caller.username}
+                  </h4>
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    @{incomingCall.caller.username} • Free WebRTC P2P
+                  </p>
+                </div>
               </div>
-              <h3 className="text-xl font-bold text-white">{activeCall.user.name}</h3>
-              <p className="text-xs text-rose-400 font-mono tracking-wide">
-                {activeCall.status === 'Connected' ? `In Call • ${formatCallTime(activeCall.duration)}` : activeCall.status}
-              </p>
+
+              {/* Accept & Reject Buttons */}
+              <div className="flex items-center gap-2 flex-none">
+                <button
+                  type="button"
+                  onClick={handleRejectIncomingCall}
+                  className="p-2.5 sm:p-3 bg-zinc-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 rounded-full border border-zinc-700/80 hover:border-rose-500/40 transition-all active:scale-95 shadow-md cursor-pointer"
+                  title="Decline Call"
+                >
+                  <PhoneOff className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAcceptIncomingCall}
+                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-full font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/25 active:scale-95 cursor-pointer animate-pulse"
+                  title="Accept Call"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Accept</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ACTIVE WEBRTC VOICE CALL OVERLAY */}
+        {activeCall && (
+          <div className="absolute inset-0 z-50 bg-zinc-950/98 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-6 text-center animate-in zoom-in-95 duration-200 overflow-y-auto">
+            {/* Top Bar */}
+            <div className="w-full flex items-center justify-between">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>WebRTC Live Audio • Google STUN P2P</span>
+              </div>
+              <button 
+                onClick={handleEndCall} 
+                className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-900 transition-colors cursor-pointer" 
+                type="button"
+                title="Minimize or End"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="flex items-center gap-6">
-              <button 
-                onClick={() => setIsMuted(!isMuted)} 
-                className={`p-4 rounded-full transition-colors ${isMuted ? 'bg-zinc-800 text-rose-400' : 'bg-zinc-800 text-white hover:bg-zinc-700'}`} 
-                type="button"
-                title={isMuted ? 'Unmute' : 'Mute'}
-              >
-                {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-              </button>
-              <button 
-                onClick={() => setActiveCall(null)} 
-                className="p-4 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl hover:scale-105 active:scale-95 transition-all" 
-                type="button"
-                title="End Call"
-              >
-                <PhoneOff className="w-6 h-6" />
-              </button>
+            {/* Main Caller Profile & Visualizer */}
+            <div className="space-y-4 my-auto py-4">
+              <div className="relative mx-auto w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
+                {/* Dynamic voice pulse rings reflecting remote speaker audio */}
+                {activeCall.status === 'connected' && (
+                  <>
+                    <div 
+                      className="absolute inset-0 rounded-full border-2 border-emerald-500/30 transition-transform duration-75"
+                      style={{ transform: `scale(${1 + (remoteAudioLevel / 100) * 0.4})` }}
+                    />
+                    <div 
+                      className="absolute inset-0 rounded-full border border-purple-500/40 transition-transform duration-100"
+                      style={{ transform: `scale(${1 + (remoteAudioLevel / 100) * 0.6})` }}
+                    />
+                  </>
+                )}
+
+                <ContactAvatar 
+                  contact={activeCall.user} 
+                  size="xl" 
+                  className={`ring-4 shadow-2xl transition-all ${
+                    activeCall.status === 'connected'
+                      ? 'ring-emerald-500/60 shadow-emerald-500/20'
+                      : 'ring-purple-500/40 animate-pulse shadow-purple-500/20'
+                  }`} 
+                />
+
+                {/* Local Mic Status Badge */}
+                <div 
+                  className={`absolute -bottom-1 -right-1 p-1.5 rounded-full border-2 border-zinc-950 shadow-md ${
+                    isMuted ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
+                  }`}
+                  title={isMuted ? 'Microphone Muted' : 'Microphone Live'}
+                >
+                  {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-white flex items-center justify-center gap-1.5">
+                  <span>{activeCall.user.name}</span>
+                  {isVerifiedUser(activeCall.user) && (
+                    <span className="w-3.5 h-3.5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[8px]">✓</span>
+                  )}
+                </h3>
+                <p className="text-xs text-zinc-400">@{activeCall.user.username}</p>
+              </div>
+
+              {/* Status Badge */}
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono">
+                {activeCall.status === 'connected' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-emerald-400 font-bold">
+                      Connected • {formatCallTime(activeCall.duration)}
+                    </span>
+                  </>
+                ) : activeCall.status === 'calling' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
+                    <span className="text-purple-300">Calling... Waiting for answer</span>
+                  </>
+                ) : activeCall.status === 'ringing' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                    <span className="text-purple-300">Ringing...</span>
+                  </>
+                ) : activeCall.status === 'connecting' ? (
+                  <>
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-amber-300">Connecting P2P Audio...</span>
+                  </>
+                ) : activeCall.status === 'rejected' ? (
+                  <span className="text-rose-400 font-bold">Call Declined</span>
+                ) : activeCall.status === 'ended' ? (
+                  <span className="text-zinc-400">Call Ended</span>
+                ) : (
+                  <span className="text-rose-400">Connection Failed</span>
+                )}
+              </div>
+
+              {/* Two-Way Audio Waveform Level Meters */}
+              <div className="max-w-xs mx-auto grid grid-cols-2 gap-3 pt-2 text-left">
+                {/* Local Mic Volume Meter */}
+                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5">
+                  <div className="flex items-center justify-between text-[11px] mb-1.5">
+                    <span className="text-zinc-400 flex items-center gap-1">
+                      <Mic className="w-3 h-3 text-zinc-400" />
+                      <span>You (Mic)</span>
+                    </span>
+                    <span className={`text-[10px] font-bold ${isMuted ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {isMuted ? 'Muted' : `${localAudioLevel}%`}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full transition-all duration-75 rounded-full ${
+                        isMuted ? 'bg-rose-500/50 w-0' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${isMuted ? 0 : localAudioLevel}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Remote Speaker Volume Meter */}
+                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5">
+                  <div className="flex items-center justify-between text-[11px] mb-1.5">
+                    <span className="text-zinc-400 flex items-center gap-1">
+                      <Volume2 className="w-3 h-3 text-zinc-400" />
+                      <span>{activeCall.user.name.split(' ')[0]}</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-purple-400">
+                      {activeCall.status === 'connected' ? `${remoteAudioLevel}%` : '—'}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-75 rounded-full"
+                      style={{ width: `${activeCall.status === 'connected' ? remoteAudioLevel : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Alert Box if any */}
+              {voiceError && (
+                <div className="max-w-xs mx-auto p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-300 flex items-start gap-2 text-left animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 text-rose-400 flex-none mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-semibold text-rose-200">{voiceError}</p>
+                    <p className="text-[11px] text-rose-400/80">
+                      Check your browser address bar permissions to ensure microphone access is granted for this site.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => startCall('audio')}
+                      className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] mt-1 transition-colors cursor-pointer"
+                    >
+                      Retry Connection
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Interactive Call Controls Bar */}
+            <div className="space-y-4 pt-2 pb-2">
+              <div className="flex items-center justify-center gap-4 sm:gap-6">
+                {/* Mute Microphone Button */}
+                <div className="flex flex-col items-center gap-1">
+                  <button 
+                    onClick={handleToggleMute} 
+                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 cursor-pointer shadow-lg ${
+                      isMuted 
+                        ? 'bg-rose-600/90 hover:bg-rose-500 text-white ring-2 ring-rose-500/50' 
+                        : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                    }`} 
+                    type="button"
+                    title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                  >
+                    {isMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  </button>
+                  <span className="text-[10px] text-zinc-400 font-medium">
+                    {isMuted ? 'Unmute' : 'Mute'}
+                  </span>
+                </div>
+
+                {/* End Call Button */}
+                <div className="flex flex-col items-center gap-1">
+                  <button 
+                    onClick={handleEndCall} 
+                    className="p-4 sm:p-5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30 hover:scale-105 active:scale-95 transition-all cursor-pointer" 
+                    type="button"
+                    title="End Call"
+                  >
+                    <PhoneOff className="w-6 h-6 sm:w-7 sm:h-7" />
+                  </button>
+                  <span className="text-[10px] text-zinc-400 font-medium">End Call</span>
+                </div>
+
+                {/* Speaker Volume Toggle / Slider */}
+                <div className="flex flex-col items-center gap-1">
+                  <button 
+                    onClick={handleToggleSpeaker} 
+                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 cursor-pointer shadow-lg ${
+                      isSpeakerMuted 
+                        ? 'bg-amber-600/90 text-white ring-2 ring-amber-500/50' 
+                        : 'bg-zinc-800 hover:bg-zinc-700 text-white'
+                    }`} 
+                    type="button"
+                    title={isSpeakerMuted ? 'Unmute speaker' : 'Mute speaker'}
+                  >
+                    {isSpeakerMuted ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  </button>
+                  <span className="text-[10px] text-zinc-400 font-medium">
+                    {isSpeakerMuted ? 'Muted' : 'Speaker'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Volume Slider Bar */}
+              <div className="max-w-[200px] mx-auto flex items-center gap-2">
+                <Volume1 className="w-3.5 h-3.5 text-zinc-500" />
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={isSpeakerMuted ? 0 : speakerVolume}
+                  onChange={(e) => handleSpeakerVolumeChange(parseFloat(e.target.value))}
+                  className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                  title="Speaker volume"
+                />
+                <Volume2 className="w-3.5 h-3.5 text-zinc-500" />
+              </div>
+
+              <p className="text-[10px] text-zinc-500 max-w-xs mx-auto">
+                🔒 Free peer-to-peer WebRTC audio encrypted end-to-end. Public Google STUN servers handle NAT traversal with zero paid dependencies.
+              </p>
             </div>
           </div>
         )}
