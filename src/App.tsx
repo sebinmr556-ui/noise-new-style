@@ -1124,67 +1124,6 @@ export default function App() {
             onDeleteComment={handleDeleteComment}
           />
         )}
-        {selectedDetailPost && (
-          <PostDetailModal
-            post={selectedDetailPost}
-            currentUser={currentUser}
-            onClose={() => setSelectedDetailPost(null)}
-            onLikeToggle={handleLikeToggle}
-            onSaveToggle={handleSaveToggle}
-            onOpenComments={(p) => setActiveCommentPost(p)}
-            onQuickComment={handleAddComment}
-            onDeletePost={handleDeletePost}
-            onBlockUser={handleBlockUser}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        {selectedUserProfile && (
-          <UserProfileModal
-            user={selectedUserProfile}
-            currentUser={currentUser}
-            posts={posts}
-            isFollowing={followingList.some(
-              (f) =>
-                f.toLowerCase() === selectedUserProfile.username.toLowerCase() ||
-                f.toLowerCase() === selectedUserProfile.uid.toLowerCase() ||
-                f.toLowerCase() === selectedUserProfile.userId.toLowerCase()
-            )}
-            onFollowToggle={handleFollowToggle}
-            onOpenDirect={(targetUsername) => {
-              setDirectTargetUsername(targetUsername);
-              setIsDirectModalOpen(true);
-            }}
-            onBlockUser={handleBlockUser}
-            onSelectPost={(post) => setSelectedDetailPost(post)}
-            onClose={() => setSelectedUserProfile(null)}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        <DirectMessagesModal 
-          isOpen={isDirectModalOpen} 
-          onClose={() => {
-            setIsDirectModalOpen(false);
-            setDirectTargetUsername(null);
-          }} 
-          currentUser={currentUser} 
-          initialTargetUsername={directTargetUsername}
-        />
-        <NotificationsModal 
-          isOpen={isNotificationsOpen} 
-          onClose={() => setIsNotificationsOpen(false)} 
-          currentUser={currentUser}
-          onSelectUser={(username) => {
-            setIsNotificationsOpen(false);
-            handleOpenUserProfile(username);
-          }}
-        />
-        <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
-      </div>
-    </div>
-  );
-}
 
         {selectedDetailPost && (
           <PostDetailModal
