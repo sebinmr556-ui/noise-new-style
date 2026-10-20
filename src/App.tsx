@@ -57,7 +57,17 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<NavTab>('home');
+  // 1. Refresh ചെയ്യുമ്പോൾ ടാബ് നഷ്ടപ്പെടാതിരിക്കാൻ sessionStorage-ൽ നിന്ന് റീഡ് ചെയ്യുന്നു
+  const [activeTab, setActiveTab] = useState<NavTab>(() => {
+    try {
+      const savedTab = sessionStorage.getItem('noise_active_tab') as NavTab | null;
+      if (savedTab && ['home', 'search', 'upload', 'reels', 'profile'].includes(savedTab)) {
+        return savedTab;
+      }
+    } catch {}
+    return 'home';
+  });
+
   const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
     try {
       const saved = localStorage.getItem('noise_current_user');
@@ -121,84 +131,84 @@ export default function App() {
   });
   const [selectedUserProfile, setSelectedUserProfile] = useState<PublicUserProfile | null>(null);
 
-const DEFAULT_ROOMS: VoiceRoom[] = [
-  {
-    id: 'room-lounge-1',
-    title: 'Late Night Chill & Lofi ☕️',
-    topic: 'Casual Hangout & Music',
-    hostUid: 'host-maya',
-    hostUsername: 'maya_beats',
-    hostDisplayName: 'Maya Beats',
-    hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    speakers: [
-      {
-        uid: 'host-maya',
-        username: 'maya_beats',
-        displayName: 'Maya Beats',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-        isHost: true,
-        isSpeaker: true,
-        isMuted: false,
-        isSpeaking: true,
-        joinedAt: Date.now() - 3600000,
-        seatNumber: 0,
-      },
-      {
-        uid: 'user-kai',
-        username: 'kai_dj',
-        displayName: 'Kai Music',
-        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
-        isSpeaker: true,
-        isMuted: false,
-        isSpeaking: false,
-        joinedAt: Date.now() - 1800000,
-        seatNumber: 1,
-      }
-    ],
-    listeners: [
-      {
-        uid: 'user-sam',
-        username: 'sam_travels',
-        displayName: 'Sam R.',
-        joinedAt: Date.now() - 900000,
-      }
-    ],
-    tags: ['Music', 'Lofi', 'Chill'],
-    ambientVibe: 'lofi',
-    isLive: true,
-    createdAt: Date.now() - 3600000,
-    slotLikes: { 0: 24, 1: 18 },
-  },
-  {
-    id: 'room-founders-2',
-    title: 'Creators & Tech Talk 🚀',
-    topic: 'App Design & Building in Public',
-    hostUid: 'host-dev',
-    hostUsername: 'alex_codes',
-    hostDisplayName: 'Alex C.',
-    hostAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-    speakers: [
-      {
-        uid: 'host-dev',
-        username: 'alex_codes',
-        displayName: 'Alex C.',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-        isHost: true,
-        isSpeaker: true,
-        isMuted: false,
-        isSpeaking: false,
-        joinedAt: Date.now() - 7200000,
-        seatNumber: 0,
-      }
-    ],
-    listeners: [],
-    tags: ['Tech', 'Design', 'Startup'],
-    ambientVibe: 'none',
-    isLive: true,
-    createdAt: Date.now() - 7200000,
-    slotLikes: { 0: 42 },
-  }
-];
+  const DEFAULT_ROOMS: VoiceRoom[] = [
+    {
+      id: 'room-lounge-1',
+      title: 'Late Night Chill & Lofi ☕️',
+      topic: 'Casual Hangout & Music',
+      hostUid: 'host-maya',
+      hostUsername: 'maya_beats',
+      hostDisplayName: 'Maya Beats',
+      hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+      speakers: [
+        {
+          uid: 'host-maya',
+          username: 'maya_beats',
+          displayName: 'Maya Beats',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
+          isHost: true,
+          isSpeaker: true,
+          isMuted: false,
+          isSpeaking: true,
+          joinedAt: Date.now() - 3600000,
+          seatNumber: 0,
+        },
+        {
+          uid: 'user-kai',
+          username: 'kai_dj',
+          displayName: 'Kai Music',
+          avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
+          isSpeaker: true,
+          isMuted: false,
+          isSpeaking: false,
+          joinedAt: Date.now() - 1800000,
+          seatNumber: 1,
+        }
+      ],
+      listeners: [
+        {
+          uid: 'user-sam',
+          username: 'sam_travels',
+          displayName: 'Sam R.',
+          joinedAt: Date.now() - 900000,
+        }
+      ],
+      tags: ['Music', 'Lofi', 'Chill'],
+      ambientVibe: 'lofi',
+      isLive: true,
+      createdAt: Date.now() - 3600000,
+      slotLikes: { 0: 24, 1: 18 },
+    },
+    {
+      id: 'room-founders-2',
+      title: 'Creators & Tech Talk 🚀',
+      topic: 'App Design & Building in Public',
+      hostUid: 'host-dev',
+      hostUsername: 'alex_codes',
+      hostDisplayName: 'Alex C.',
+      hostAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+      speakers: [
+        {
+          uid: 'host-dev',
+          username: 'alex_codes',
+          displayName: 'Alex C.',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
+          isHost: true,
+          isSpeaker: true,
+          isMuted: false,
+          isSpeaking: false,
+          joinedAt: Date.now() - 7200000,
+          seatNumber: 0,
+        }
+      ],
+      listeners: [],
+      tags: ['Tech', 'Design', 'Startup'],
+      ambientVibe: 'none',
+      isLive: true,
+      createdAt: Date.now() - 7200000,
+      slotLikes: { 0: 42 },
+    }
+  ];
 
   // Voice Chatrooms State
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(DEFAULT_ROOMS);
@@ -366,7 +376,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
       }
     }
     setCurrentUser(null);
-    setActiveTab('home');
+    handleTabChange('home');
     setIsMenuOpen(false);
   };
 
@@ -481,7 +491,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
     };
     setPosts((prev) => [newPost, ...prev]);
     setIsTopLoading(false);
-    setActiveTab('home');
+    handleTabChange('home');
   };
 
   const handleDeletePost = async (postId: string) => {
@@ -696,12 +706,16 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
     }
   };
 
+  // 2. Tab മാറ്റുമ്പോൾ sessionStorage-ലേക്ക് സേവ് ചെയ്യുന്നു
   const handleTabChange = (tab: NavTab) => {
     if (!currentUser && (tab === 'upload' || tab === 'profile')) {
       setIsLoginModalOpen(true);
       return;
     }
     setActiveTab(tab);
+    try {
+      sessionStorage.setItem('noise_active_tab', tab);
+    } catch {}
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -805,7 +819,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-zinc-950" />
             </button>
 
-            {/* Direct Messages: Changed from flight icon to sleek message icon */}
+            {/* Direct Messages */}
             <button
               onClick={() => setIsDirectModalOpen(true)}
               className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
@@ -919,7 +933,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
             <UploadView
               currentUser={currentUser}
               onPostCreated={handleCreatePost}
-              onCancel={() => setActiveTab('home')}
+              onCancel={() => handleTabChange('home')}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
           )}
@@ -940,7 +954,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
               onRemoveAvatar={handleRemoveAvatar}
               onUpdateProfile={handleUpdateProfile}
               onSelectPost={(post) => setSelectedDetailPost(post)}
-              onOpenUpload={() => setActiveTab('upload')}
+              onOpenUpload={() => handleTabChange('upload')}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
           )}
@@ -984,207 +998,4 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
                       type="checkbox" 
                       checked={isPrivateAccount} 
                       onChange={() => setIsPrivateAccount(!isPrivateAccount)}
-                      className="accent-rose-500 w-4 h-4 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => { setIsMenuOpen(false); setActiveTab('profile'); }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
-                >
-                  <Shield className="w-5 h-5 text-purple-400" />
-                  <span>Profile Settings & Security</span>
-                </button>
-
-                <button 
-                  onClick={() => { alert('Noise Support: support@noise.app'); }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
-                >
-                  <HelpCircle className="w-5 h-5 text-emerald-400" />
-                  <span>Help & Support</span>
-                </button>
-              </div>
-
-              {currentUser && (
-                <div className="pt-4 border-t border-zinc-800">
-                  <button 
-                    onClick={handleSignOut}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-sm font-bold"
-                  >
-                    <LogOut className="w-5 h-5" />
-                    <span>Log Out</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Coin Purchase Modal */}
-        {isCoinModalOpen && (
-          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Coins className="w-6 h-6 text-amber-400" />
-                  <h3 className="text-lg font-bold text-white">Get More Coins</h3>
-                </div>
-                <button onClick={() => setIsCoinModalOpen(false)} className="text-zinc-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button 
-                  onClick={() => { setCoinsBalance(prev => prev + 100); setIsCoinModalOpen(false); alert('Successfully added 100 Coins!'); }}
-                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
-                >
-                  <p className="text-xl font-extrabold text-amber-400">100</p>
-                  <p className="text-xs text-zinc-400 mt-1">$0.99</p>
-                </button>
-                <button 
-                  onClick={() => { setCoinsBalance(prev => prev + 550); setIsCoinModalOpen(false); alert('Successfully added 550 Coins!'); }}
-                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
-                >
-                  <p className="text-xl font-extrabold text-amber-400">550</p>
-                  <p className="text-xs text-zinc-400 mt-1">$4.99</p>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Other Modals */}
-        {activeStoryIndex !== null && visibleStories[activeStoryIndex] && (
-          <StoryViewerModal
-            stories={visibleStories}
-            initialIndex={activeStoryIndex}
-            currentUser={currentUser}
-            onClose={() => setActiveStoryIndex(null)}
-            onStorySeen={handleStorySeen}
-            onDeleteStory={handleDeleteStory}
-            onOpenDirectChat={() => setIsDirectModalOpen(true)}
-            onOpenChatroom={handleOpenChatroomFromStory}
-          />
-        )}
-
-        {/* Live Voice Chatroom Modals */}
-        {activeVoiceRoom && isVoiceRoomModalOpen && (
-          <VoiceRoomModal
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            isOpen={isVoiceRoomModalOpen}
-            onMinimize={() => setIsVoiceRoomModalOpen(false)}
-            onLeaveRoom={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-            onDeleteRoom={handleDeleteVoiceRoom}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        {isCreateVoiceRoomOpen && (
-          <CreateVoiceRoomModal
-            isOpen={isCreateVoiceRoomOpen}
-            onClose={() => setIsCreateVoiceRoomOpen(false)}
-            currentUser={currentUser}
-            onCreateRoom={handleCreateVoiceRoom}
-          />
-        )}
-
-        {isVoiceRoomsListOpen && (
-          <VoiceRoomsListModal
-            isOpen={isVoiceRoomsListOpen}
-            rooms={voiceRooms}
-            currentUser={currentUser}
-            onClose={() => setIsVoiceRoomsListOpen(false)}
-            onJoinRoom={handleJoinVoiceRoom}
-            onOpenCreateRoom={() => {
-              setIsVoiceRoomsListOpen(false);
-              setIsCreateVoiceRoomOpen(true);
-            }}
-            onDeleteRoom={handleDeleteVoiceRoom}
-          />
-        )}
-
-        {activeVoiceRoom && !isVoiceRoomModalOpen && (
-          <VoiceRoomMiniPlayer
-            room={activeVoiceRoom}
-            currentUser={currentUser}
-            onExpand={() => setIsVoiceRoomModalOpen(true)}
-            onLeave={handleLeaveVoiceRoom}
-            onUpdateRoom={handleUpdateActiveRoom}
-          />
-        )}
-
-        {activeCommentPost && (
-          <CommentsModal
-            post={activeCommentPost}
-            currentUser={currentUser}
-            onClose={() => setActiveCommentPost(null)}
-            onAddComment={handleAddComment}
-            onDeleteComment={handleDeleteComment}
-          />
-        )}
-
-        {selectedDetailPost && (
-          <PostDetailModal
-            post={selectedDetailPost}
-            currentUser={currentUser}
-            onClose={() => setSelectedDetailPost(null)}
-            onLikeToggle={handleLikeToggle}
-            onSaveToggle={handleSaveToggle}
-            onOpenComments={(p) => setActiveCommentPost(p)}
-            onQuickComment={handleAddComment}
-            onDeletePost={handleDeletePost}
-            onBlockUser={handleBlockUser}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        {selectedUserProfile && (
-          <UserProfileModal
-            user={selectedUserProfile}
-            currentUser={currentUser}
-            posts={posts}
-            isFollowing={followingList.some(
-              (f) =>
-                f.toLowerCase() === selectedUserProfile.username.toLowerCase() ||
-                f.toLowerCase() === selectedUserProfile.uid.toLowerCase() ||
-                f.toLowerCase() === selectedUserProfile.userId.toLowerCase()
-            )}
-            onFollowToggle={handleFollowToggle}
-            onOpenDirect={(targetUsername) => {
-              setDirectTargetUsername(targetUsername);
-              setIsDirectModalOpen(true);
-            }}
-            onBlockUser={handleBlockUser}
-            onSelectPost={(post) => setSelectedDetailPost(post)}
-            onClose={() => setSelectedUserProfile(null)}
-            onRequireLogin={() => setIsLoginModalOpen(true)}
-          />
-        )}
-
-        <DirectMessagesModal 
-          isOpen={isDirectModalOpen} 
-          onClose={() => {
-            setIsDirectModalOpen(false);
-            setDirectTargetUsername(null);
-          }} 
-          currentUser={currentUser} 
-          initialTargetUsername={directTargetUsername}
-        />
-        <NotificationsModal 
-          isOpen={isNotificationsOpen} 
-          onClose={() => setIsNotificationsOpen(false)} 
-          currentUser={currentUser}
-          onSelectUser={(username) => {
-            setIsNotificationsOpen(false);
-            handleOpenUserProfile(username);
-          }}
-        />
-        <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
-      </div>
-    </div>
-  );
-}
+                      className="accent-rose-500 w-4 h-
