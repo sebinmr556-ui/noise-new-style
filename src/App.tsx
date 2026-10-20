@@ -57,7 +57,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export default function App() {
-  // 1. Refresh ചെയ്യുമ്പോൾ ടാബ് നഷ്ടപ്പെടാതിരിക്കാൻ sessionStorage-ൽ നിന്ന് റീഡ് ചെയ്യുന്നു
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     try {
       const savedTab = sessionStorage.getItem('noise_active_tab') as NavTab | null;
@@ -115,13 +114,11 @@ export default function App() {
   const [isTopLoading, setIsTopLoading] = useState(false);
   const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
 
-  // New States for Menu, Coins, and Private Account
   const [coinsBalance, setCoinsBalance] = useState<number>(150);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
 
-  // Follow / Unfollow System & User ID Profile Modal
   const [followingList, setFollowingList] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem('noise_following_list');
@@ -210,7 +207,6 @@ export default function App() {
     }
   ];
 
-  // Voice Chatrooms State
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(DEFAULT_ROOMS);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
@@ -706,7 +702,6 @@ export default function App() {
     }
   };
 
-  // 2. Tab മാറ്റുമ്പോൾ sessionStorage-ലേക്ക് സേവ് ചെയ്യുന്നു
   const handleTabChange = (tab: NavTab) => {
     if (!currentUser && (tab === 'upload' || tab === 'profile')) {
       setIsLoginModalOpen(true);
@@ -767,8 +762,6 @@ export default function App() {
       <TopLoadingBar isLoading={isTopLoading || isLoadingPosts} />
 
       <div className="w-full max-w-[470px] min-h-screen bg-zinc-950 relative pb-14 border-x border-zinc-800/80 shadow-2xl flex flex-col">
-        
-        {/* Custom Header with Coin & Hamburger Menu Integration */}
         <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-extrabold bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
@@ -786,7 +779,6 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5">
-            {/* Top Right Voice & Group Chatroom Icon */}
             <button
               onClick={() => {
                 if (activeVoiceRoom) {
@@ -808,7 +800,6 @@ export default function App() {
               )}
             </button>
 
-            {/* Notifications Button */}
             <button
               onClick={() => setIsNotificationsOpen(true)}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95"
@@ -819,7 +810,6 @@ export default function App() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-zinc-950" />
             </button>
 
-            {/* Direct Messages */}
             <button
               onClick={() => setIsDirectModalOpen(true)}
               className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
@@ -832,7 +822,6 @@ export default function App() {
               </span>
             </button>
 
-            {/* 3-Line Hamburger Menu Button */}
             <button
               onClick={() => setIsMenuOpen(true)}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all active:scale-95"
@@ -855,7 +844,6 @@ export default function App() {
                   onAddStory={handleAddUserStory}
                 />
 
-                {/* Live Voice Chatrooms Carousel */}
                 <LiveVoiceRoomsBar
                   rooms={voiceRooms}
                   currentUser={currentUser}
@@ -962,7 +950,6 @@ export default function App() {
 
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} currentUser={currentUser} />
 
-        {/* 3-Line Hamburger Menu Drawer / Modal */}
         {isMenuOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex justify-end">
             <div className="w-80 bg-zinc-900 h-full p-5 flex flex-col border-l border-zinc-800 animate-in slide-in-from-right duration-200">
@@ -998,4 +985,204 @@ export default function App() {
                       type="checkbox" 
                       checked={isPrivateAccount} 
                       onChange={() => setIsPrivateAccount(!isPrivateAccount)}
-                      className="accent-rose-500 w-4 h-
+                      className="accent-rose-500 w-4 h-4 cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => { setIsMenuOpen(false); handleTabChange('profile'); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                >
+                  <Shield className="w-5 h-5 text-purple-400" />
+                  <span>Profile Settings & Security</span>
+                </button>
+
+                <button 
+                  onClick={() => { alert('Noise Support: support@noise.app'); }}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                >
+                  <HelpCircle className="w-5 h-5 text-emerald-400" />
+                  <span>Help & Support</span>
+                </button>
+              </div>
+
+              {currentUser && (
+                <div className="pt-4 border-t border-zinc-800">
+                  <button 
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-sm font-bold"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>Log Out</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isCoinModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Coins className="w-6 h-6 text-amber-400" />
+                  <h3 className="text-lg font-bold text-white">Get More Coins</h3>
+                </div>
+                <button onClick={() => setIsCoinModalOpen(false)} className="text-zinc-400 hover:text-white">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button 
+                  onClick={() => { setCoinsBalance(prev => prev + 100); setIsCoinModalOpen(false); alert('Successfully added 100 Coins!'); }}
+                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
+                >
+                  <p className="text-xl font-extrabold text-amber-400">100</p>
+                  <p className="text-xs text-zinc-400 mt-1">$0.99</p>
+                </button>
+                <button 
+                  onClick={() => { setCoinsBalance(prev => prev + 550); setIsCoinModalOpen(false); alert('Successfully added 550 Coins!'); }}
+                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
+                >
+                  <p className="text-xl font-extrabold text-amber-400">550</p>
+                  <p className="text-xs text-zinc-400 mt-1">$4.99</p>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeStoryIndex !== null && visibleStories[activeStoryIndex] && (
+          <StoryViewerModal
+            stories={visibleStories}
+            initialIndex={activeStoryIndex}
+            currentUser={currentUser}
+            onClose={() => setActiveStoryIndex(null)}
+            onStorySeen={handleStorySeen}
+            onDeleteStory={handleDeleteStory}
+            onOpenDirectChat={() => setIsDirectModalOpen(true)}
+            onOpenChatroom={handleOpenChatroomFromStory}
+          />
+        )}
+
+        {activeVoiceRoom && isVoiceRoomModalOpen && (
+          <VoiceRoomModal
+            room={activeVoiceRoom}
+            currentUser={currentUser}
+            isOpen={isVoiceRoomModalOpen}
+            onMinimize={() => setIsVoiceRoomModalOpen(false)}
+            onLeaveRoom={handleLeaveVoiceRoom}
+            onUpdateRoom={handleUpdateActiveRoom}
+            onDeleteRoom={handleDeleteVoiceRoom}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+          />
+        )}
+
+        {isCreateVoiceRoomOpen && (
+          <CreateVoiceRoomModal
+            isOpen={isCreateVoiceRoomOpen}
+            onClose={() => setIsCreateVoiceRoomOpen(false)}
+            currentUser={currentUser}
+            onCreateRoom={handleCreateVoiceRoom}
+          />
+        )}
+
+        {isVoiceRoomsListOpen && (
+          <VoiceRoomsListModal
+            isOpen={isVoiceRoomsListOpen}
+            rooms={voiceRooms}
+            currentUser={currentUser}
+            onClose={() => setIsVoiceRoomsListOpen(false)}
+            onJoinRoom={handleJoinVoiceRoom}
+            onOpenCreateRoom={() => {
+              setIsVoiceRoomsListOpen(false);
+              setIsCreateVoiceRoomOpen(true);
+            }}
+            onDeleteRoom={handleDeleteVoiceRoom}
+          />
+        )}
+
+        {activeVoiceRoom && !isVoiceRoomModalOpen && (
+          <VoiceRoomMiniPlayer
+            room={activeVoiceRoom}
+            currentUser={currentUser}
+            onExpand={() => setIsVoiceRoomModalOpen(true)}
+            onLeave={handleLeaveVoiceRoom}
+            onUpdateRoom={handleUpdateActiveRoom}
+          />
+        )}
+
+        {activeCommentPost && (
+          <CommentsModal
+            post={activeCommentPost}
+            currentUser={currentUser}
+            onClose={() => setActiveCommentPost(null)}
+            onAddComment={handleAddComment}
+            onDeleteComment={handleDeleteComment}
+          />
+        )}
+
+        {selectedDetailPost && (
+          <PostDetailModal
+            post={selectedDetailPost}
+            currentUser={currentUser}
+            onClose={() => setSelectedDetailPost(null)}
+            onLikeToggle={handleLikeToggle}
+            onSaveToggle={handleSaveToggle}
+            onOpenComments={(p) => setActiveCommentPost(p)}
+            onQuickComment={handleAddComment}
+            onDeletePost={handleDeletePost}
+            onBlockUser={handleBlockUser}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+          />
+        )}
+
+        {selectedUserProfile && (
+          <UserProfileModal
+            user={selectedUserProfile}
+            currentUser={currentUser}
+            posts={posts}
+            isFollowing={followingList.some(
+              (f) =>
+                f.toLowerCase() === selectedUserProfile.username.toLowerCase() ||
+                f.toLowerCase() === selectedUserProfile.uid.toLowerCase() ||
+                f.toLowerCase() === selectedUserProfile.userId.toLowerCase()
+            )}
+            onFollowToggle={handleFollowToggle}
+            onOpenDirect={(targetUsername) => {
+              setDirectTargetUsername(targetUsername);
+              setIsDirectModalOpen(true);
+            }}
+            onBlockUser={handleBlockUser}
+            onSelectPost={(post) => setSelectedDetailPost(post)}
+            onClose={() => setSelectedUserProfile(null)}
+            onRequireLogin={() => setIsLoginModalOpen(true)}
+          />
+        )}
+
+        <DirectMessagesModal 
+          isOpen={isDirectModalOpen} 
+          onClose={() => {
+            setIsDirectModalOpen(false);
+            setDirectTargetUsername(null);
+          }} 
+          currentUser={currentUser} 
+          initialTargetUsername={directTargetUsername}
+        />
+        <NotificationsModal 
+          isOpen={isNotificationsOpen} 
+          onClose={() => setIsNotificationsOpen(false)} 
+          currentUser={currentUser}
+          onSelectUser={(username) => {
+            setIsNotificationsOpen(false);
+            handleOpenUserProfile(username);
+          }}
+        />
+        <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
+      </div>
+    </div>
+  );
+}
