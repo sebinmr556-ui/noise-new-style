@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Send, Heart, Trash2, User } from 'lucide-react';
 import { Post, AppUser } from '../types';
+import { formatRelativeTime } from '../utils/time';
 
 interface CommentsModalProps {
   post: Post | null;
@@ -56,7 +57,15 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
             <div className="flex-1 text-xs">
               <span className="font-bold text-white mr-1.5">{post.username}</span>
               <span className="text-zinc-300 whitespace-pre-wrap">{post.caption}</span>
-              <div className="text-[10px] text-zinc-500 mt-1">Author</div>
+              <div className="flex items-center gap-1.5 text-[10px] text-zinc-500 mt-1">
+                <span>Author</span>
+                {post.createdAt && (
+                  <>
+                    <span>•</span>
+                    <span>{formatRelativeTime(post.createdAt)}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -76,7 +85,9 @@ export const CommentsModal: React.FC<CommentsModalProps> = ({
                   <div className="text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-white">{comment.username}</span>
-                      <span className="text-[10px] text-zinc-500">{comment.createdAt}</span>
+                      <span className="text-[10px] text-zinc-500 font-normal">
+                        {formatRelativeTime(comment.createdAt)}
+                      </span>
                     </div>
                     <p className="text-zinc-300 mt-0.5">{comment.text}</p>
                   </div>

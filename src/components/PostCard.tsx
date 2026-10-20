@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Post, AppUser } from '../types';
 import { isGlobalAdmin } from '../utils/admin';
+import { formatRelativeTime } from '../utils/time';
 
 interface PostCardProps {
   post: Post;
@@ -206,17 +207,6 @@ export const PostCard: React.FC<PostCardProps> = ({
     }, 1500);
   };
 
-  const formatTime = (ts: any) => {
-    if (!ts) return 'recently';
-    if (typeof ts === 'number') {
-      const diff = Math.floor((Date.now() - ts) / 1000);
-      if (diff < 60) return 'just now';
-      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-      return `${Math.floor(diff / 86400)}d ago`;
-    }
-    return 'recently';
-  };
 
   if (isPostHidden) {
     return (
@@ -323,7 +313,7 @@ export const PostCard: React.FC<PostCardProps> = ({
 
               <span className="text-zinc-600 text-[10px]">•</span>
               <span className="text-[11px] text-zinc-400 font-normal">
-                {formatTime(post.createdAt)}
+                {formatRelativeTime(post.createdAt)}
               </span>
             </div>
             {post.location && (

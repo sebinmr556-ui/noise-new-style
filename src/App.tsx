@@ -421,7 +421,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
       username: currentUser.username,
       avatar: currentUser.photoURL,
       text: text,
-      createdAt: 'Just now',
+      createdAt: new Date().toISOString(),
     };
     setPosts((prev) =>
       prev.map((p) => {
@@ -802,6 +802,7 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
               title="Notifications"
             >
               <Heart className="w-5 h-5 group-hover:text-rose-500 group-hover:scale-110 transition-all" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-zinc-950" />
             </button>
 
             {/* Direct Messages: Changed from flight icon to sleek message icon */}
@@ -1173,7 +1174,15 @@ const DEFAULT_ROOMS: VoiceRoom[] = [
           currentUser={currentUser} 
           initialTargetUsername={directTargetUsername}
         />
-        <NotificationsModal isOpen={isNotificationsOpen} onClose={() => setIsNotificationsOpen(false)} />
+        <NotificationsModal 
+          isOpen={isNotificationsOpen} 
+          onClose={() => setIsNotificationsOpen(false)} 
+          currentUser={currentUser}
+          onSelectUser={(username) => {
+            setIsNotificationsOpen(false);
+            handleOpenUserProfile(username);
+          }}
+        />
         <LoginModal isOpen={isLoginModalOpen} onClose={() => setIsLoginModalOpen(false)} onLoginSuccess={(user) => setCurrentUser(user)} />
       </div>
     </div>
