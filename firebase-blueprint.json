@@ -1,5 +1,27 @@
 {
   "entities": {
+    "User": {
+      "title": "User",
+      "description": "Registered user profile with unique username, display name, avatar, bio, and counts.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Primary key user ID (Auth UID)" },
+        "userId": { "type": "string", "description": "Primary database user ID (matches uid)" },
+        "username": { "type": "string", "description": "Unique username" },
+        "displayName": { "type": "string", "description": "Display name of the user" },
+        "avatar": { "type": "string", "description": "Avatar image URL or base64 data" },
+        "photoURL": { "type": "string", "description": "Photo URL" },
+        "bio": { "type": "string", "description": "Bio description" },
+        "website": { "type": "string", "description": "User website link" },
+        "followersCount": { "type": "number", "description": "Follower count" },
+        "followingCount": { "type": "number", "description": "Following count" },
+        "isVerified": { "type": "boolean", "description": "Verified status" },
+        "isPrivate": { "type": "boolean", "description": "Private profile status" },
+        "blockedUsers": { "type": "array", "description": "List of blocked user IDs" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Update timestamp" }
+      },
+      "required": ["uid", "username", "displayName"]
+    },
     "Post": {
       "title": "Post",
       "description": "A social media post with filtered image, caption, location, and likes.",
@@ -36,6 +58,10 @@
     }
   },
   "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Registered user accounts collection indexed by Auth UID"
+    },
     "/posts/{postId}": {
       "schema": "Post",
       "description": "Feed and profile posts collection"

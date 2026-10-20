@@ -24,6 +24,7 @@ export interface PublicUserProfile {
   followersCount: number;
   followingCount: number;
   isVerified?: boolean;
+  isPrivate?: boolean;
 }
 
 export interface CommentItem {

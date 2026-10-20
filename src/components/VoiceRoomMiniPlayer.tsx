@@ -1,7 +1,12 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Mic, MicOff, PhoneOff, Maximize2, Users, Music } from 'lucide-react';
 import { VoiceRoom, AppUser } from '../types';
 import { playMicToggleSound } from '../utils/audioVibeEngine';
+import {
+  isLocalMediaTrackMuted,
+  setLocalMediaTrackMuted,
+  subscribeToMediaTrackChanges,
+} from '../utils/voiceRoomMedia';
 
 interface VoiceRoomMiniPlayerProps {
   room: VoiceRoom;
@@ -21,23 +26,59 @@ export const VoiceRoomMiniPlayer: React.FC<VoiceRoomMiniPlayerProps> = ({
   const isHost = currentUser?.uid === room.hostUid;
   const localSpeaker = room.speakers.find((s) => s.uid === currentUser?.uid);
   const isSpeaker = Boolean(localSpeaker || isHost);
-  const isMuted = localSpeaker?.isMuted ?? false;
 
-  const toggleMute = (e: React.MouseEvent) => {
+  // Sync mute state with hardware media track & room speaker record
+  const [isMuted, setIsMuted] = useState<boolean>(() => {
+    if (localSpeaker?.isMuted !== undefined) return localSpeaker.isMuted;
+    return isLocalMediaTrackMuted();
+  });
+
+  useEffect(() => {
+    // Subscribe to track changes initiated from VoiceRoomModal or system
+    const unsubscribe = subscribeToMediaTrackChanges((muted) => {
+      setIsMuted(muted);
+    });
+
+    const handleMicSignal = (e: CustomEvent<boolean | { isMuted: boolean }>) => {
+      const nextMuted = typeof e.detail === 'boolean' ? e.detail : e.detail?.isMuted;
+      if (typeof nextMuted === 'boolean') {
+        setIsMuted(nextMuted);
+      }
+    };
+
+    window.addEventListener('mute-hardware-mic', handleMicSignal as EventListener);
+    window.addEventListener('voice-room-mic-status', handleMicSignal as EventListener);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('mute-hardware-mic', handleMicSignal as EventListener);
+      window.removeEventListener('voice-room-mic-status', handleMicSignal as EventListener);
+    };
+  }, []);
+
+  // Also sync if room prop updates speaker status
+  useEffect(() => {
+    if (localSpeaker?.isMuted !== undefined && localSpeaker.isMuted !== isMuted) {
+      setIsMuted(localSpeaker.isMuted);
+    }
+  }, [localSpeaker?.isMuted]);
+
+  const handleToggleMediaTrack = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!currentUser) return;
 
     const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
     playMicToggleSound(!nextMuted);
 
-    // Update Firebase state
+    // Toggle hardware media track status directly
+    setLocalMediaTrackMuted(nextMuted);
+
+    // Update room speaker state
     const updatedSpeakers = room.speakers.map((s) =>
       s.uid === currentUser.uid ? { ...s, isMuted: nextMuted } : s
     );
     onUpdateRoom({ ...room, speakers: updatedSpeakers });
-
-    // Send signal to VoiceRoomModal to mute hardware mic
-    window.dispatchEvent(new CustomEvent('mute-hardware-mic', { detail: nextMuted }));
   };
 
   const handleLeave = (e: React.MouseEvent) => {
@@ -95,16 +136,21 @@ export const VoiceRoomMiniPlayer: React.FC<VoiceRoomMiniPlayerProps> = ({
       <div className="flex items-center gap-1.5 flex-none" onClick={(e) => e.stopPropagation()}>
         {isSpeaker && (
           <button
-            onClick={toggleMute}
-            className={`p-2 rounded-xl transition-all shadow-xs ${
+            onClick={handleToggleMediaTrack}
+            className={`p-2 rounded-xl transition-all shadow-xs flex items-center justify-center active:scale-95 ${
               isMuted
-                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30'
-                : 'bg-emerald-500 text-white hover:bg-emerald-600'
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30 ring-1 ring-rose-500/20'
+                : 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-[0_0_12px_rgba(16,185,129,0.35)]'
             }`}
-            title={isMuted ? 'Unmute' : 'Mute'}
+            title={isMuted ? 'Unmute microphone (Currently Muted)' : 'Mute microphone (Currently Live)'}
+            aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
             type="button"
           >
-            {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 animate-pulse" />}
+            {isMuted ? (
+              <MicOff className="w-4 h-4 text-rose-400" />
+            ) : (
+              <Mic className="w-4 h-4 text-white animate-pulse" />
+            )}
           </button>
         )}
 

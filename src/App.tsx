@@ -20,10 +20,9 @@ import {
   deleteDoc,
   onSnapshot
 } from './firebase';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant, PublicUserProfile } from './types';
 import { UserProfileModal } from './components/UserProfileModal';
-import { getAllDiscoverableUsers } from './data/usersData';
+import { syncUserToDatabase, getRegisteredUserById, toggleFollowInDatabase } from './utils/userSearch';
 import { Header } from './components/Header';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
@@ -109,6 +108,7 @@ export default function App() {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
   const [directTargetUsername, setDirectTargetUsername] = useState<string | null>(null);
+  const [directTargetUser, setDirectTargetUser] = useState<PublicUserProfile | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
@@ -233,33 +233,68 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         let firestoreBlockedUsers: string[] = [];
+        let firestoreDisplayName = user.displayName || 'Noise Creator';
+        let firestoreUsername = (user.displayName || 'user')
+          .toLowerCase()
+          .replace(/[^a-z0-9_]/g, '_')
+          .slice(0, 15);
+        let firestorePhotoURL = user.photoURL || '';
+        let firestoreBio = 'Digital Creator ✨\nNoise App Official 🚀';
+        let firestoreWebsite = '';
+        let firestoreFollowersCount = 0;
+        let firestoreFollowingCount = 0;
+
         if (db) {
           try {
             const userSnap = await getDoc(doc(db, 'users', user.uid));
             if (userSnap.exists()) {
               const uData = userSnap.data();
+              if (uData.displayName) firestoreDisplayName = uData.displayName;
+              if (uData.username) firestoreUsername = uData.username;
+              if (uData.photoURL || uData.avatar) firestorePhotoURL = uData.photoURL || uData.avatar;
+              if (uData.bio) firestoreBio = uData.bio;
+              if (uData.website) firestoreWebsite = uData.website;
+              if (typeof uData.followersCount === 'number') firestoreFollowersCount = uData.followersCount;
+              if (typeof uData.followingCount === 'number') firestoreFollowingCount = uData.followingCount;
               if (Array.isArray(uData.blockedUsers)) {
                 firestoreBlockedUsers = uData.blockedUsers;
               }
+            } else {
+              // Ensure user document exists in Firestore with real authenticated UID
+              await syncUserToDatabase({
+                uid: user.uid,
+                username: firestoreUsername,
+                displayName: firestoreDisplayName,
+                photoURL: firestorePhotoURL,
+                bio: firestoreBio,
+                website: firestoreWebsite,
+                followersCount: 0,
+                followingCount: 0,
+                blockedUsers: [],
+              });
             }
           } catch (e) {
-            console.debug('Error reading user profile:', e);
+            console.debug('Error reading or syncing user profile:', e);
           }
         }
 
-        setCurrentUser((prev) => ({
+        const freshUser: AppUser = {
           uid: user.uid,
-          displayName: user.displayName || prev?.displayName || 'User',
-          username: (user.displayName || prev?.username || 'user')
-            .toLowerCase()
-            .replace(/[^a-z0-9_]/g, '_')
-            .slice(0, 15),
-          email: user.email || prev?.email || undefined,
-          photoURL: user.photoURL || (prev?.photoURL && !prev.photoURL.includes('unsplash.com') ? prev.photoURL : ''),
-          followersCount: prev?.followersCount || 0,
-          followingCount: prev?.followingCount || 0,
-          blockedUsers: Array.from(new Set([...(prev?.blockedUsers || []), ...firestoreBlockedUsers])),
-        }));
+          displayName: firestoreDisplayName,
+          username: firestoreUsername,
+          email: user.email || undefined,
+          photoURL: firestorePhotoURL,
+          bio: firestoreBio,
+          website: firestoreWebsite,
+          followersCount: firestoreFollowersCount,
+          followingCount: firestoreFollowingCount,
+          blockedUsers: Array.from(new Set([...firestoreBlockedUsers])),
+        };
+
+        setCurrentUser(freshUser);
+        try {
+          localStorage.setItem('noise_current_user', JSON.stringify(freshUser));
+        } catch {}
       }
     });
 
@@ -528,80 +563,127 @@ export default function App() {
     }
   };
 
-  const handleUpdateProfile = (updates: { displayName: string; username: string; bio: string; website?: string }) => {
-    if (!currentUser) return;
-    setCurrentUser((prev) => prev ? { ...prev, ...updates } : null);
+  const handleOpenDirect = (targetUserOrUsername: PublicUserProfile | string, targetUid?: string) => {
+    if (typeof targetUserOrUsername === 'object' && targetUserOrUsername !== null) {
+      setDirectTargetUser(targetUserOrUsername);
+      setDirectTargetUsername(targetUserOrUsername.username);
+    } else {
+      setDirectTargetUsername(targetUserOrUsername);
+      if (targetUid) {
+        setDirectTargetUser({
+          uid: targetUid,
+          userId: targetUid,
+          username: targetUserOrUsername,
+          displayName: targetUserOrUsername,
+          avatar: '',
+          followersCount: 0,
+          followingCount: 0,
+        });
+      } else {
+        setDirectTargetUser(null);
+      }
+    }
+    setIsDirectModalOpen(true);
   };
 
-  const handleUpdateAvatar = (dataUrl: string) => {
+  const handleUpdateProfile = async (updates: { displayName: string; username: string; bio: string; website?: string }) => {
     if (!currentUser) return;
-    setCurrentUser((prev) => prev ? { ...prev, photoURL: dataUrl } : null);
+    const updatedUser = { ...currentUser, ...updates };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
+    } catch {}
+    await syncUserToDatabase({ uid: currentUser.uid, ...updates });
   };
 
-  const handleRemoveAvatar = () => {
+  const handleUpdateAvatar = async (dataUrl: string) => {
     if (!currentUser) return;
-    setCurrentUser((prev) => prev ? { ...prev, photoURL: '' } : null);
+    const updatedUser = { ...currentUser, photoURL: dataUrl };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
+    } catch {}
+    await syncUserToDatabase({ uid: currentUser.uid, username: currentUser.username, photoURL: dataUrl, avatar: dataUrl });
   };
 
-  const handleFollowToggle = (userOrId: PublicUserProfile | string) => {
+  const handleRemoveAvatar = async () => {
+    if (!currentUser) return;
+    const updatedUser = { ...currentUser, photoURL: '' };
+    setCurrentUser(updatedUser);
+    try {
+      localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
+    } catch {}
+    await syncUserToDatabase({ uid: currentUser.uid, username: currentUser.username, photoURL: '', avatar: '' });
+  };
+
+  const handleFollowToggle = async (userOrId: PublicUserProfile | string) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
       return;
     }
-    const targetKey = typeof userOrId === 'string'
-      ? userOrId.toLowerCase()
-      : (userOrId.username || userOrId.uid || userOrId.userId).toLowerCase();
+    const targetUid = typeof userOrId === 'string'
+      ? userOrId
+      : (userOrId.uid || userOrId.userId || userOrId.username);
 
-    setFollowingList((prev) => {
-      const isAlreadyFollowing = prev.some((f) => f.toLowerCase() === targetKey);
-      const updated = isAlreadyFollowing
-        ? prev.filter((f) => f.toLowerCase() !== targetKey)
-        : [...prev, targetKey];
+    const isAlreadyFollowing = followingList.some((f) => f.toLowerCase() === targetUid.toLowerCase());
+    const updatedFollowing = isAlreadyFollowing
+      ? followingList.filter((f) => f.toLowerCase() !== targetUid.toLowerCase())
+      : [...followingList, targetUid];
 
+    setFollowingList(updatedFollowing);
+    try {
+      localStorage.setItem('noise_following_list', JSON.stringify(updatedFollowing));
+    } catch {}
+
+    setCurrentUser((u) => {
+      if (!u) return null;
+      const newCount = Math.max(0, (u.followingCount || 0) + (isAlreadyFollowing ? -1 : 1));
+      const updatedUser = { ...u, followingCount: newCount, following: updatedFollowing };
       try {
-        localStorage.setItem('noise_following_list', JSON.stringify(updated));
+        localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
       } catch {}
-
-      setCurrentUser((u) => {
-        if (!u) return null;
-        const newCount = Math.max(0, (u.followingCount || 0) + (isAlreadyFollowing ? -1 : 1));
-        const updatedUser = { ...u, followingCount: newCount, following: updated };
-        try {
-          localStorage.setItem('noise_current_user', JSON.stringify(updatedUser));
-        } catch {}
-        return updatedUser;
-      });
-
-      return updated;
+      return updatedUser;
     });
+
+    try {
+      await toggleFollowInDatabase(currentUser.uid, targetUid, !isAlreadyFollowing);
+    } catch (e) {
+      console.debug('Follow database sync warning:', e);
+    }
   };
 
-  const handleOpenUserProfile = (usernameOrUser: string | PublicUserProfile, uid?: string, avatar?: string) => {
+  const handleOpenUserProfile = async (usernameOrUser: string | PublicUserProfile, uid?: string, avatar?: string) => {
     if (typeof usernameOrUser === 'object' && usernameOrUser !== null) {
       setSelectedUserProfile(usernameOrUser);
       return;
     }
     const un = usernameOrUser;
-    const allUsers = getAllDiscoverableUsers(posts);
-    const found = allUsers.find(
-      (u) =>
-        u.username.toLowerCase() === un.toLowerCase() ||
-        (uid && u.uid.toLowerCase() === uid.toLowerCase())
-    );
-    if (found) {
-      setSelectedUserProfile(found);
-    } else {
-      setSelectedUserProfile({
-        uid: uid || `usr_${un}`,
-        userId: un.toLowerCase(),
-        username: un,
-        displayName: un,
-        avatar: avatar || '',
-        followersCount: 14,
-        followingCount: 5,
-        isVerified: false,
-      });
+    const targetLookup = uid || un;
+
+    try {
+      const dbUser = await getRegisteredUserById(targetLookup);
+      if (dbUser) {
+        setSelectedUserProfile(dbUser);
+        return;
+      }
+    } catch (e) {
+      console.debug('Error looking up profile by ID:', e);
     }
+
+    const postMatch = posts.find(
+      (p) => (uid && p.uid === uid) || p.username.toLowerCase() === un.toLowerCase()
+    );
+
+    setSelectedUserProfile({
+      uid: postMatch?.uid || uid || un,
+      userId: postMatch?.uid || uid || un,
+      username: postMatch?.username || un,
+      displayName: postMatch?.username || un,
+      avatar: postMatch?.avatar || avatar || '',
+      followersCount: 1,
+      followingCount: 0,
+      isVerified: Boolean(postMatch?.isVerified),
+    });
   };
 
   const handleStorySeen = (storyId: string) => {
@@ -941,6 +1023,7 @@ export default function App() {
               onFollowToggle={handleFollowToggle}
               onSelectPost={(post) => setSelectedDetailPost(post)} 
               onSelectUser={(user) => setSelectedUserProfile(user)}
+              onOpenDirect={handleOpenDirect}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
           )}
@@ -1096,7 +1179,7 @@ export default function App() {
           />
         )}
 
-        {activeVoiceRoom && isVoiceRoomModalOpen && (
+        {activeVoiceRoom && (
           <VoiceRoomModal
             room={activeVoiceRoom}
             currentUser={currentUser}
@@ -1180,9 +1263,9 @@ export default function App() {
                 f.toLowerCase() === selectedUserProfile.userId.toLowerCase()
             )}
             onFollowToggle={handleFollowToggle}
-            onOpenDirect={(targetUsername) => {
-              setDirectTargetUsername(targetUsername);
-              setIsDirectModalOpen(true);
+            onOpenDirect={(targetUser, targetUid) => {
+              handleOpenDirect(targetUser, targetUid);
+              setSelectedUserProfile(null);
             }}
             onBlockUser={handleBlockUser}
             onSelectPost={(post) => setSelectedDetailPost(post)}
@@ -1196,9 +1279,11 @@ export default function App() {
           onClose={() => {
             setIsDirectModalOpen(false);
             setDirectTargetUsername(null);
+            setDirectTargetUser(null);
           }} 
           currentUser={currentUser} 
           initialTargetUsername={directTargetUsername}
+          initialTargetUser={directTargetUser}
         />
         <NotificationsModal 
           isOpen={isNotificationsOpen} 

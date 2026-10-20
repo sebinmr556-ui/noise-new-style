@@ -24,7 +24,7 @@ interface UserProfileModalProps {
   posts: Post[];
   isFollowing: boolean;
   onFollowToggle: (user: PublicUserProfile) => void;
-  onOpenDirect: (username: string) => void;
+  onOpenDirect: (user: PublicUserProfile | string, targetUid?: string) => void;
   onBlockUser?: (userId: string) => void;
   onSelectPost: (post: Post) => void;
   onClose: () => void;
@@ -276,7 +276,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <button
                     onClick={() => {
                       if (isBlocked) return;
-                      onOpenDirect(user.username);
+                      onOpenDirect(user, user.uid);
                       onClose();
                     }}
                     disabled={isBlocked}

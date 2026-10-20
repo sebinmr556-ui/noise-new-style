@@ -19,6 +19,13 @@ import {
   playVictorySound,
   playDiceRollSound
 } from '../utils/audioVibeEngine';
+import {
+  setActiveVoiceRoomStream,
+  setLocalMediaTrackMuted,
+  isLocalMediaTrackMuted,
+  stopActiveVoiceRoomStream,
+  subscribeToMediaTrackChanges,
+} from '../utils/voiceRoomMedia';
 
 interface VoiceRoomModalProps {
   room: VoiceRoom;
@@ -162,6 +169,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       navigator.mediaDevices.getUserMedia({ audio: true, video: false })
         .then((stream) => {
           setLocalStream(stream);
+          setActiveVoiceRoomStream(stream, isMuted);
           createMicAnalyser().then((handle) => {
             if (handle) {
               micHandleRef.current = handle;
@@ -181,8 +189,31 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     return () => {
       if (localStream) localStream.getTracks().forEach((track) => track.stop());
       if (micHandleRef.current) micHandleRef.current.cleanup();
+      stopActiveVoiceRoomStream();
     };
   }, [isSpeaker]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToMediaTrackChanges((muted) => {
+      setIsMuted(muted);
+    });
+
+    const handleMicSignal = (e: CustomEvent<boolean | { isMuted: boolean }>) => {
+      const nextMuted = typeof e.detail === 'boolean' ? e.detail : e.detail?.isMuted;
+      if (typeof nextMuted === 'boolean') {
+        setIsMuted(nextMuted);
+      }
+    };
+
+    window.addEventListener('mute-hardware-mic', handleMicSignal as EventListener);
+    window.addEventListener('voice-room-mic-status', handleMicSignal as EventListener);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('mute-hardware-mic', handleMicSignal as EventListener);
+      window.removeEventListener('voice-room-mic-status', handleMicSignal as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     if (localStream) {
@@ -218,15 +249,27 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const toggleMute = () => {
+  const handleToggleMediaTrack = () => {
     const nextState = !isMuted;
     setIsMuted(nextState);
     playMicToggleSound(!nextState);
+
+    // Toggle hardware media track status directly
+    setLocalMediaTrackMuted(nextState);
+    if (localStream) {
+      localStream.getAudioTracks().forEach((t) => { t.enabled = !nextState; });
+    }
+    if (micHandleRef.current) {
+      micHandleRef.current.setMuted(nextState);
+    }
+
     if (currentUser) {
       const updated = room.speakers.map((s) => s.uid === currentUser.uid ? { ...s, isMuted: nextState } : s);
       onUpdateRoom({ ...room, speakers: updated });
     }
   };
+
+  const toggleMute = handleToggleMediaTrack;
 
   const toggleHandRaise = () => {
     if (!currentUser) return onRequireLogin();
@@ -908,14 +951,42 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                         className="w-full h-full object-cover"
                       />
 
-                      {/* Mic status indicator */}
-                      <div className="absolute bottom-0 right-0 p-0.5 bg-black/80 rounded-full">
-                        {participant.isMuted ? (
-                          <MicOff className="w-2.5 h-2.5 text-rose-500" />
+                      {/* Dynamic Mic status indicator with onClick to toggle local media track status */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          if (isLocalUser) {
+                            e.stopPropagation();
+                            handleToggleMediaTrack();
+                          }
+                        }}
+                        disabled={!isLocalUser}
+                        title={
+                          isLocalUser
+                            ? (isMuted ? 'Unmute microphone (Click to toggle)' : 'Mute microphone (Click to toggle)')
+                            : (participant.isMuted ? 'Muted' : 'Speaking')
+                        }
+                        aria-label={
+                          isLocalUser
+                            ? (isMuted ? 'Unmute microphone' : 'Mute microphone')
+                            : (participant.isMuted ? 'Muted' : 'Speaking')
+                        }
+                        className={`absolute bottom-0 right-0 p-1 rounded-full transition-all shadow-md z-10 ${
+                          isLocalUser
+                            ? 'cursor-pointer hover:scale-125 active:scale-95 ring-2 ring-white/50'
+                            : 'pointer-events-none'
+                        } ${
+                          (isLocalUser ? isMuted : participant.isMuted)
+                            ? 'bg-rose-600 text-white hover:bg-rose-500'
+                            : 'bg-emerald-500 text-black hover:bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]'
+                        }`}
+                      >
+                        {(isLocalUser ? isMuted : participant.isMuted) ? (
+                          <MicOff className="w-2.5 h-2.5" />
                         ) : (
-                          <Mic className="w-2.5 h-2.5 text-emerald-400" />
+                          <Mic className={`w-2.5 h-2.5 ${isLocalUser && isSpeakingLocally ? 'animate-bounce' : ''}`} />
                         )}
-                      </div>
+                      </button>
                     </div>
                   ) : (
                     <div className="flex flex-col items-center justify-center text-zinc-500 group-hover:text-indigo-400">
@@ -1036,14 +1107,21 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           {/* Mic Toggle or Raise Hand */}
           {isSpeaker ? (
             <button
-              onClick={toggleMute}
-              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full font-bold text-xs shadow-lg transition-all active:scale-95 ${
+              onClick={handleToggleMediaTrack}
+              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-full font-bold text-xs shadow-lg transition-all active:scale-95 cursor-pointer ${
                 isMuted
                   ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 hover:bg-rose-500/30'
-                  : 'bg-emerald-500 text-black border border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+                  : 'bg-emerald-500 text-black border border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.4)] hover:bg-emerald-400'
               }`}
+              title={isMuted ? 'Unmute microphone (Click to toggle media track)' : 'Mute microphone (Click to toggle media track)'}
+              aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+              type="button"
             >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {isMuted ? (
+                <MicOff className="w-4 h-4 text-rose-400" />
+              ) : (
+                <Mic className="w-4 h-4 text-black animate-pulse" />
+              )}
               <span>{isMuted ? 'Muted' : 'Speaking'}</span>
             </button>
           ) : (
@@ -1140,21 +1218,42 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </div>
             <div className="flex-1 overflow-y-auto py-3 space-y-2 no-scrollbar">
               <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider">Speakers</span>
-              {room.speakers.map((s) => (
-                <div key={s.uid} className="flex items-center justify-between p-2 rounded-xl bg-white/5">
-                  <div className="flex items-center gap-2.5">
-                    <img src={s.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.username)}`} className="w-8 h-8 rounded-full object-cover" />
-                    <div>
-                      <p className="text-xs font-bold text-white flex items-center gap-1">
-                        {s.displayName || s.username}
-                        {s.isHost && <Crown className="w-3 h-3 text-amber-400" />}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">@{s.username}</p>
+              {room.speakers.map((s) => {
+                const isLocalSpeaker = Boolean(currentUser && s.uid === currentUser.uid);
+                const speakerMuted = isLocalSpeaker ? isMuted : Boolean(s.isMuted);
+                return (
+                  <div key={s.uid} className="flex items-center justify-between p-2 rounded-xl bg-white/5">
+                    <div className="flex items-center gap-2.5">
+                      <img src={s.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.username)}`} className="w-8 h-8 rounded-full object-cover" />
+                      <div>
+                        <p className="text-xs font-bold text-white flex items-center gap-1">
+                          {s.displayName || s.username}
+                          {s.isHost && <Crown className="w-3 h-3 text-amber-400" />}
+                        </p>
+                        <p className="text-[10px] text-zinc-400">@{s.username}</p>
+                      </div>
                     </div>
+                    {isLocalSpeaker ? (
+                      <button
+                        type="button"
+                        onClick={handleToggleMediaTrack}
+                        className={`p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-medium cursor-pointer active:scale-95 ${
+                          speakerMuted
+                            ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
+                            : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                        }`}
+                        title={speakerMuted ? 'Unmute microphone' : 'Mute microphone'}
+                        aria-label={speakerMuted ? 'Unmute microphone' : 'Mute microphone'}
+                      >
+                        {speakerMuted ? <MicOff className="w-3.5 h-3.5 text-rose-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />}
+                        <span>{speakerMuted ? 'Muted' : 'Live'}</span>
+                      </button>
+                    ) : (
+                      speakerMuted ? <MicOff className="w-3.5 h-3.5 text-rose-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                    )}
                   </div>
-                  {s.isMuted ? <MicOff className="w-3.5 h-3.5 text-rose-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                </div>
-              ))}
+                );
+              })}
 
               <span className="text-[10px] font-bold uppercase text-zinc-500 tracking-wider pt-2 block">Listeners</span>
               {room.listeners.length === 0 ? (

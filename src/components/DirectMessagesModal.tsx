@@ -41,12 +41,19 @@ import {
   CallSessionData, 
   getCallChannelId 
 } from '../utils/webrtcVoice';
+import { PublicUserProfile } from '../types';
+import { 
+  getSuggestedDatabaseUsers, 
+  getRegisteredUserById, 
+  searchRegisteredUsers 
+} from '../utils/userSearch';
 
 interface DirectMessagesModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: AppUser | null;
   initialTargetUsername?: string | null;
+  initialTargetUser?: PublicUserProfile | { uid: string; username: string; displayName?: string; avatar?: string } | null;
 }
 
 interface Message {
@@ -240,6 +247,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   onClose,
   currentUser,
   initialTargetUsername,
+  initialTargetUser,
 }) => {
   const [contacts, setContacts] = useState<ChatContact[]>(() => {
     try {
@@ -311,19 +319,43 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     } catch {}
   }, [contacts, threads]);
 
-  // Open initial target username if requested from stories/posts
+  // Real database suggested users for compose
+  const [dbSuggestedUsers, setDbSuggestedUsers] = useState<PublicUserProfile[]>([]);
+
   useEffect(() => {
-    if (initialTargetUsername && isOpen) {
-      const cleanHandle = initialTargetUsername.toLowerCase().replace('@', '');
-      const existing = contacts.find((c) => c.username.toLowerCase() === cleanHandle);
+    if (isOpen) {
+      getSuggestedDatabaseUsers(currentUser, 8)
+        .then((users) => {
+          setDbSuggestedUsers(users);
+        })
+        .catch((err) => {
+          console.debug('Failed to fetch suggested database users:', err);
+        });
+    }
+  }, [isOpen, currentUser]);
+
+  // Open initial target user or username if requested with real database ID
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (initialTargetUser) {
+      const targetId = initialTargetUser.uid;
+      const cleanHandle = (initialTargetUser.username || '').toLowerCase().replace('@', '');
+      const existing = contacts.find((c) => c.id === targetId || (cleanHandle && c.username.toLowerCase() === cleanHandle));
+
       if (existing) {
-        setSelectedContact(existing);
+        setSelectedContact({
+          ...existing,
+          id: targetId,
+          name: initialTargetUser.displayName || existing.name,
+          avatar: initialTargetUser.avatar || existing.avatar,
+        });
       } else {
         const newContact: ChatContact = {
-          id: `u-${cleanHandle}`,
-          name: cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1),
-          username: cleanHandle,
-          avatar: '',
+          id: targetId, // Real database ID
+          name: initialTargetUser.displayName || (cleanHandle ? cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1) : 'User'),
+          username: cleanHandle || targetId.slice(0, 8),
+          avatar: initialTargetUser.avatar || '',
           lastMessage: 'Started new conversation',
           time: 'Just now',
           unread: false,
@@ -333,8 +365,34 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         setContacts((prev) => [newContact, ...prev]);
         setSelectedContact(newContact);
       }
+      return;
     }
-  }, [initialTargetUsername, isOpen]);
+
+    if (initialTargetUsername) {
+      const cleanHandle = initialTargetUsername.toLowerCase().replace('@', '');
+      const existing = contacts.find((c) => c.username.toLowerCase() === cleanHandle || c.id === cleanHandle);
+      if (existing) {
+        setSelectedContact(existing);
+      } else {
+        getRegisteredUserById(cleanHandle).then((dbUser) => {
+          const targetId = dbUser?.uid || cleanHandle;
+          const newContact: ChatContact = {
+            id: targetId, // Real database ID
+            name: dbUser?.displayName || cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1),
+            username: dbUser?.username || cleanHandle,
+            avatar: dbUser?.avatar || '',
+            lastMessage: 'Started new conversation',
+            time: 'Just now',
+            unread: false,
+            online: true,
+            category: 'primary',
+          };
+          setContacts((prev) => [newContact, ...prev]);
+          setSelectedContact(newContact);
+        });
+      }
+    }
+  }, [initialTargetUsername, initialTargetUser, isOpen]);
 
   // Handle call timer for active connected calls
   useEffect(() => {
@@ -637,13 +695,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setIsThreadMenuOpen(false);
   };
 
-  // Start new chat with username
-  const handleStartNewChat = (e?: React.FormEvent, customHandle?: string) => {
+  // Start new chat with real database user ID
+  const handleStartNewChat = async (e?: React.FormEvent, customHandle?: string) => {
     if (e) e.preventDefault();
     const handle = (customHandle || newChatInput).trim().replace(/^@/, '');
     if (!handle) return;
 
-    const existing = contacts.find((c) => c.username.toLowerCase() === handle.toLowerCase());
+    const existing = contacts.find((c) => c.username.toLowerCase() === handle.toLowerCase() || c.id === handle);
     if (existing) {
       handleSelectContact(existing);
       setIsComposing(false);
@@ -651,11 +709,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       return;
     }
 
+    const dbUser = await getRegisteredUserById(handle);
+    const targetId = dbUser?.uid || handle;
+
     const newContact: ChatContact = {
-      id: `u-${handle.toLowerCase()}`,
-      name: handle.charAt(0).toUpperCase() + handle.slice(1),
-      username: handle.toLowerCase(),
-      avatar: '',
+      id: targetId, // Real database primary key ID
+      name: dbUser?.displayName || handle.charAt(0).toUpperCase() + handle.slice(1),
+      username: dbUser?.username || handle.toLowerCase(),
+      avatar: dbUser?.avatar || '',
       lastMessage: 'Started new conversation',
       time: 'Just now',
       unread: false,
@@ -885,23 +946,25 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </button>
                 </form>
 
-                {/* Suggested user chips */}
-                <div className="pt-1">
-                  <p className="text-[10px] text-zinc-400 font-semibold mb-1.5 uppercase tracking-wider">Suggested creators:</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {SUGGESTED_USERS.map((u) => (
-                      <button
-                        key={u.username}
-                        type="button"
-                        onClick={() => handleStartNewChat(undefined, u.username)}
-                        className="flex items-center gap-1.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 px-2.5 py-1 rounded-full text-xs text-zinc-300 transition-all active:scale-95"
-                      >
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        <span>@{u.username}</span>
-                      </button>
-                    ))}
+                {/* Suggested registered user chips */}
+                {dbSuggestedUsers.length > 0 && (
+                  <div className="pt-1">
+                    <p className="text-[10px] text-zinc-400 font-semibold mb-1.5 uppercase tracking-wider">Suggested from database:</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {dbSuggestedUsers.map((u) => (
+                        <button
+                          key={u.uid}
+                          type="button"
+                          onClick={() => handleStartNewChat(undefined, u.username)}
+                          className="flex items-center gap-1.5 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-600 px-2.5 py-1 rounded-full text-xs text-zinc-300 transition-all active:scale-95 cursor-pointer"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>@{u.username}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

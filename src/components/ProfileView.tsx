@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Plus, 
   Grid, 
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { AppUser, Post, PublicUserProfile } from '../types';
 import { EditProfileModal } from './EditProfileModal';
-import { getAllDiscoverableUsers } from '../data/usersData';
+import { getSuggestedDatabaseUsers } from '../utils/userSearch';
 
 interface ProfileViewProps {
   currentUser: AppUser | null;
@@ -65,7 +65,12 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
   const [copiedMyId, setCopiedMyId] = useState(false);
   const [showFollowListModal, setShowFollowListModal] = useState<'following' | 'followers' | null>(null);
   const [followSearchQuery, setFollowSearchQuery] = useState('');
+  const [dbUsers, setDbUsers] = useState<PublicUserProfile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    getSuggestedDatabaseUsers(currentUser, 50).then(setDbUsers).catch(console.debug);
+  }, [currentUser]);
 
   if (!currentUser) {
     return (
@@ -535,14 +540,13 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
             {/* List */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2 no-scrollbar">
               {(() => {
-                const allDiscovered = getAllDiscoverableUsers(posts);
                 const q = followSearchQuery.toLowerCase().trim();
 
                 let listToShow: PublicUserProfile[] = [];
 
                 if (showFollowListModal === 'following') {
                   listToShow = followingList.map((idOrUsername) => {
-                    const found = allDiscovered.find(
+                    const found = dbUsers.find(
                       (u) =>
                         u.uid.toLowerCase() === idOrUsername.toLowerCase() ||
                         u.username.toLowerCase() === idOrUsername.toLowerCase() ||
@@ -560,8 +564,8 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                     };
                   });
                 } else {
-                  // Followers list
-                  listToShow = allDiscovered.slice(0, 4);
+                  // Followers list from database
+                  listToShow = dbUsers.slice(0, 10);
                 }
 
                 if (q) {
