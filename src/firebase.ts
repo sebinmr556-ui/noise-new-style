@@ -5,7 +5,10 @@ import {
   signInWithPopup, 
   signOut as fbSignOut, 
   onAuthStateChanged,
-  User as FirebaseUser
+  setPersistence,
+  browserLocalPersistence,
+  User as FirebaseUser,
+  Auth
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -37,7 +40,7 @@ export const firebaseConfig = {
 };
 
 let app: any = null;
-let auth: any = null;
+let auth: Auth | any = null;
 let db: Firestore | null = null;
 let storage: FirebaseStorage | null = null;
 let isFirebaseConfigured = false;
@@ -45,8 +48,14 @@ let isFirebaseConfigured = false;
 try {
   app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   auth = getAuth(app);
+  
+  // Refresh ചെയ്യുമ്പോൾ ലോഗിൻ സെഷൻ ലോക്കൽ സ്റ്റോറേജിൽ തന്നെ നിലനിർത്തുന്നു
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn("Auth persistence error:", err);
+  });
+
   db = getFirestore(app);
-  storage = getStorage(app); // സ്റ്റോറേജ് ഇവിടെ ഇനിഷ്യലൈസ് ചെയ്തിരിക്കുന്നു
+  storage = getStorage(app);
   isFirebaseConfigured = true;
 } catch (error) {
   console.warn("Firebase initialization warning:", error);
@@ -80,7 +89,7 @@ export {
   app, 
   auth, 
   db, 
-  storage, // സ്റ്റോറേജ് ഇവിടെ എക്സ്പോർട്ട് ചെയ്തിരിക്കുന്നു
+  storage, 
   isFirebaseConfigured,
   GoogleAuthProvider, 
   signInWithPopup, 
