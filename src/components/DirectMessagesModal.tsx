@@ -33,7 +33,17 @@ import {
 } from 'lucide-react';
 import { AppUser } from '../types';
 import { db, isFirebaseConfigured } from '../firebase';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  addDoc, 
+  serverTimestamp,
+  doc,
+  deleteDoc,
+  updateDoc
+} from 'firebase/firestore';
 import { isVerifiedUser } from '../utils/admin';
 import { 
   WebRTCVoiceManager, 
@@ -334,6 +344,154 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [isOpen, currentUser]);
 
+  // Real-Time Direct Messages Listener from Firestore
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !currentUser) return;
+
+    const dmsQuery = query(collection(db, 'direct_messages'));
+    const unsubscribe = onSnapshot(
+      dmsQuery,
+      (snapshot) => {
+        const remoteThreads: Record<string, Message[]> = {};
+        const contactUpdates = new Map<
+          string,
+          {
+            lastMsg: string;
+            time: string;
+            timestamp: number;
+            unread: boolean;
+            peerUid: string;
+            peerName: string;
+            peerUsername: string;
+            peerAvatar: string;
+          }
+        >();
+
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const senderId = String(data.senderId || '');
+          const receiverId = String(data.receiverId || '');
+          const participants: string[] = Array.isArray(data.participants) ? data.participants : [senderId, receiverId];
+
+          const isSender = senderId === currentUser.uid;
+          const isReceiver =
+            receiverId === currentUser.uid ||
+            (currentUser.username && receiverId.toLowerCase() === currentUser.username.toLowerCase()) ||
+            (currentUser.username && receiverId.toLowerCase() === `u-${currentUser.username.toLowerCase()}`);
+          const isParticipant = participants.includes(currentUser.uid) || isSender || isReceiver;
+
+          if (!isParticipant) return;
+
+          const peerId = isSender ? receiverId : senderId;
+          if (!peerId || peerId === currentUser.uid) return;
+
+          const peerUsername = isSender
+            ? data.receiverUsername || 'user'
+            : data.senderUsername || 'user';
+          const peerDisplayName = isSender
+            ? data.receiverDisplayName || peerUsername
+            : data.senderDisplayName || peerUsername;
+          const peerAvatar = isSender
+            ? data.receiverAvatar || ''
+            : data.senderAvatar || '';
+
+          const timestamp = data.createdAt?.toMillis
+            ? data.createdAt.toMillis()
+            : (typeof data.clientTimestamp === 'number' ? data.clientTimestamp : Date.now());
+          const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          const msg: Message = {
+            id: docSnap.id,
+            sender: data.senderUsername || (isSender ? currentUser.username : peerUsername),
+            text: data.text || '',
+            image: data.image || undefined,
+            voiceDuration: data.voiceDuration || undefined,
+            time: timeStr,
+            isMe: isSender,
+            reaction: data.reaction || undefined,
+          };
+
+          if (!remoteThreads[peerId]) remoteThreads[peerId] = [];
+          remoteThreads[peerId].push(msg);
+
+          const previewText = data.text || (data.image ? '📷 Photo' : '🎙️ Voice note');
+          const isUnread = !isSender && data.read !== true && selectedContact?.id !== peerId;
+
+          const existingMeta = contactUpdates.get(peerId);
+          if (!existingMeta || timestamp > existingMeta.timestamp) {
+            contactUpdates.set(peerId, {
+              lastMsg: previewText,
+              time: timeStr,
+              timestamp,
+              unread: isUnread,
+              peerUid: peerId,
+              peerName: peerDisplayName,
+              peerUsername,
+              peerAvatar,
+            });
+          }
+        });
+
+        // Merge messages into threads state
+        setThreads((prev) => {
+          const merged = { ...prev };
+          for (const [pid, list] of Object.entries(remoteThreads)) {
+            const existingList = merged[pid] || [];
+            const msgMap = new Map<string, Message>();
+            existingList.forEach((m) => msgMap.set(m.id, m));
+            list.forEach((m) => msgMap.set(m.id, m));
+            merged[pid] = Array.from(msgMap.values()).sort((a, b) => a.id.localeCompare(b.id));
+          }
+          return merged;
+        });
+
+        // Update contacts with real incoming conversation partners
+        if (contactUpdates.size > 0) {
+          setContacts((prevContacts) => {
+            const updated = [...prevContacts];
+            for (const [peerId, meta] of contactUpdates.entries()) {
+              const idx = updated.findIndex(
+                (c) =>
+                  c.id === peerId ||
+                  (meta.peerUsername && c.username.toLowerCase() === meta.peerUsername.toLowerCase())
+              );
+              if (idx >= 0) {
+                updated[idx] = {
+                  ...updated[idx],
+                  id: peerId,
+                  name: meta.peerName || updated[idx].name,
+                  username: meta.peerUsername || updated[idx].username,
+                  avatar: meta.peerAvatar || updated[idx].avatar,
+                  lastMessage: meta.lastMsg,
+                  time: meta.time,
+                  unread: meta.unread,
+                };
+              } else {
+                updated.unshift({
+                  id: peerId,
+                  name: meta.peerName || meta.peerUsername,
+                  username: meta.peerUsername,
+                  avatar: meta.peerAvatar,
+                  lastMessage: meta.lastMsg,
+                  time: meta.time,
+                  unread: meta.unread,
+                  online: true,
+                  category: 'primary',
+                });
+              }
+            }
+            return updated;
+          });
+        }
+      },
+      (error) => {
+        console.error('Real-time direct messages listener error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [currentUser, selectedContact?.id]);
+
   // Open initial target user or username if requested with real database ID
   useEffect(() => {
     if (!isOpen) return;
@@ -504,8 +662,12 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (!text && !attachedImage && !voiceDuration) return;
     if (!selectedContact) return;
 
+    const targetContactId = selectedContact.id;
+    const targetUsername = selectedContact.username;
+
+    const localMsgId = `msg-${Date.now()}`;
     const newMsg: Message = {
-      id: `msg-${Date.now()}`,
+      id: localMsgId,
       sender: currentUser?.username || 'me',
       text: text,
       image: attachedImage,
@@ -513,9 +675,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isMe: true,
     };
-
-    const targetContactId = selectedContact.id;
-    const targetUsername = selectedContact.username;
 
     setThreads((prev) => ({
       ...prev,
@@ -538,68 +697,33 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       setInputText('');
     }
 
-    // Firestore sync if configured
+    // Live Real-Time Firestore Direct Message Delivery
     if (isFirebaseConfigured && db && currentUser) {
       try {
+        const convId = [currentUser.uid, targetContactId].sort().join('_');
         await addDoc(collection(db, 'direct_messages'), {
+          conversationId: convId,
+          participants: [currentUser.uid, targetContactId],
           senderId: currentUser.uid,
+          senderUsername: currentUser.username,
+          senderDisplayName: currentUser.displayName || currentUser.username,
+          senderAvatar: currentUser.photoURL || '',
           receiverId: targetContactId,
+          receiverUsername: targetUsername,
+          receiverDisplayName: selectedContact.name,
+          receiverAvatar: selectedContact.avatar || '',
           text: text,
           image: attachedImage || '',
           voiceDuration: voiceDuration || '',
+          reaction: '',
+          read: false,
           createdAt: serverTimestamp(),
+          clientTimestamp: Date.now(),
         });
       } catch (err) {
-        console.warn('Direct message sync error:', err);
+        console.error('Direct message Firestore save error:', err);
       }
     }
-
-    // Simulate smart interactive reply after 1.5 seconds from contact
-    triggerSimulatedReply(targetContactId, targetUsername, text);
-  };
-
-  const triggerSimulatedReply = (contactId: string, contactUsername: string, userText: string) => {
-    setTimeout(() => {
-      setIsTyping(true);
-      setTimeout(() => {
-        setIsTyping(false);
-        const replies = [
-          `Hey! Thanks for the message 😊`,
-          `Appreciate you reaching out! Hope you're enjoying Noise ✨`,
-          `Love that! Are you tuning into the voice room later? 🎧`,
-          `Totally agree! Let's talk more soon 🚀`,
-          `🔥 That is awesome!`,
-          `Nice! Looking forward to your next story post 📸`,
-        ];
-        const randomReply = replies[Math.floor(Math.random() * replies.length)];
-
-        const replyMsg: Message = {
-          id: `reply-${Date.now()}`,
-          sender: contactUsername,
-          text: randomReply,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          isMe: false,
-        };
-
-        setThreads((prev) => ({
-          ...prev,
-          [contactId]: [...(prev[contactId] || []), replyMsg],
-        }));
-
-        setContacts((prev) =>
-          prev.map((c) =>
-            c.id === contactId
-              ? {
-                  ...c,
-                  lastMessage: randomReply,
-                  time: 'Just now',
-                  unread: selectedContact?.id !== contactId,
-                }
-              : c
-          )
-        );
-      }, 1500);
-    }, 800);
   };
 
   // Image attachment
@@ -647,7 +771,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   };
 
   // Toggle emoji reaction on message
-  const handleToggleReaction = (msgId: string, emoji: string) => {
+  const handleToggleReaction = async (msgId: string, emoji: string) => {
     if (!selectedContact) return;
     setThreads((prev) => ({
       ...prev,
@@ -655,10 +779,20 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         m.id === msgId ? { ...m, reaction: m.reaction === emoji ? undefined : emoji } : m
       ),
     }));
+
+    if (isFirebaseConfigured && db && !msgId.startsWith('msg-') && !msgId.startsWith('m')) {
+      try {
+        await updateDoc(doc(db, 'direct_messages', msgId), {
+          reaction: emoji,
+        });
+      } catch (err) {
+        console.debug('Reaction update error:', err);
+      }
+    }
   };
 
   // Delete/unsend message
-  const handleDeleteMessage = (msgId: string) => {
+  const handleDeleteMessage = async (msgId: string) => {
     if (!selectedContact) return;
     setThreads((prev) => {
       const updated = (prev[selectedContact.id] || []).filter((m) => m.id !== msgId);
@@ -676,6 +810,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       );
       return { ...prev, [selectedContact.id]: updated };
     });
+
+    if (isFirebaseConfigured && db && !msgId.startsWith('msg-') && !msgId.startsWith('m')) {
+      try {
+        await deleteDoc(doc(db, 'direct_messages', msgId));
+      } catch (err) {
+        console.debug('Delete message error:', err);
+      }
+    }
   };
 
   // Copy message text

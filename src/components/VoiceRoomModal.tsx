@@ -26,6 +26,14 @@ import {
   stopActiveVoiceRoomStream,
   subscribeToMediaTrackChanges,
 } from '../utils/voiceRoomMedia';
+import { db, isFirebaseConfigured } from '../firebase';
+import { 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  serverTimestamp, 
+  query 
+} from 'firebase/firestore';
 
 interface VoiceRoomModalProps {
   room: VoiceRoom;
@@ -106,6 +114,50 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   ]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Real-Time Voice Room Chat Sync via Firestore
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !room?.id) return;
+
+    const msgsCol = collection(db, 'voice_rooms', room.id, 'messages');
+    const unsubscribe = onSnapshot(
+      msgsCol,
+      (snapshot) => {
+        const loaded: RoomMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          loaded.push({
+            id: docSnap.id,
+            uid: d.uid || 'user',
+            username: d.username || 'User',
+            displayName: d.displayName || d.username || 'User',
+            avatar: d.avatar || '',
+            text: d.text || '',
+            createdAt: d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt || Date.now()),
+          });
+        });
+
+        loaded.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+
+        setMessages([
+          {
+            id: 'm-welcome',
+            uid: 'system',
+            username: 'Room Bot',
+            avatar: 'https://ui-avatars.com/api/?name=Noise+Bot&background=6366f1&color=fff',
+            text: `Welcome to "${room.title}"! Tap any slot heart to send love ❤️`,
+            createdAt: 0,
+          },
+          ...loaded,
+        ]);
+      },
+      (err) => {
+        console.debug('Voice room messages listener error:', err);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [room?.id]);
 
   // Slot Likes state (10 slots)
   const [slotLikes, setSlotLikes] = useState<{ [slotIdx: number]: number }>(() => room.slotLikes || {});
@@ -480,27 +532,43 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }, 1000);
   };
 
-  // Chat message submit
-  const handleSendMessage = (e: React.FormEvent) => {
+  // Chat message submit to real-time Firestore collection
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatInput.trim()) return;
+    const text = chatInput.trim();
+    if (!text) return;
     if (!currentUser) {
       onRequireLogin();
       return;
     }
 
-    const newMsg: RoomMessage = {
-      id: `msg-${Date.now()}`,
-      uid: currentUser.uid,
-      username: currentUser.username,
-      avatar: currentUser.photoURL,
-      text: chatInput.trim(),
-      createdAt: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
     setChatInput('');
     playPopSound();
+
+    if (isFirebaseConfigured && db && room?.id) {
+      try {
+        await addDoc(collection(db, 'voice_rooms', room.id, 'messages'), {
+          uid: currentUser.uid,
+          username: currentUser.username,
+          displayName: currentUser.displayName || currentUser.username,
+          avatar: currentUser.photoURL || '',
+          text: text,
+          createdAt: serverTimestamp(),
+        });
+      } catch (err) {
+        console.error('Failed to post voice room message:', err);
+      }
+    } else {
+      const newMsg: RoomMessage = {
+        id: `msg-${Date.now()}`,
+        uid: currentUser.uid,
+        username: currentUser.username,
+        avatar: currentUser.photoURL,
+        text: text,
+        createdAt: Date.now(),
+      };
+      setMessages((prev) => [...prev, newMsg]);
+    }
   };
 
   const handleShareRoom = () => {

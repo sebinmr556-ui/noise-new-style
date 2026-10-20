@@ -112,6 +112,7 @@ export interface RoomMessage {
   id: string;
   uid: string;
   username: string;
+  displayName?: string;
   avatar?: string;
   text: string;
   createdAt: number;
