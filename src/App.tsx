@@ -981,11 +981,12 @@ export default function App() {
                         Be the first to share a moment! Apply filters and post.
                       </p>
                       <button
-                        onClick={() => handleTabChange('upload')}
-                        className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
-                      >
-                        Create First Post
-                      </button>
+  onClick={() => handleTabChange('upload')}
+  className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
+>
+  Create First Post
+</button>
+
                     </div>
                   ) : (
                     visiblePosts.map((post) => (
