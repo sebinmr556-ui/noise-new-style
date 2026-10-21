@@ -14,35 +14,32 @@ import {
   PhoneOff,
   Check,
   CheckCheck,
-  Smile,
   Play,
   Pause,
   MoreVertical,
   Trash2,
-  Sparkles,
   Volume2,
   VolumeX,
   Volume1,
   AlertCircle,
   Radio,
-  Activity,
   Copy,
   Bell,
   BellOff,
   Maximize2
 } from 'lucide-react';
-import { AppUser } from '../types';
+import { AppUser, PublicUserProfile } from '../types';
 import { db, isFirebaseConfigured } from '../firebase';
 import { 
   collection, 
   query, 
-  orderBy, 
   onSnapshot, 
   addDoc, 
   serverTimestamp,
   doc,
   deleteDoc,
-  updateDoc
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { isVerifiedUser } from '../utils/admin';
 import { 
@@ -51,11 +48,9 @@ import {
   CallSessionData, 
   getCallChannelId 
 } from '../utils/webrtcVoice';
-import { PublicUserProfile } from '../types';
 import { 
   getSuggestedDatabaseUsers, 
-  getRegisteredUserById, 
-  searchRegisteredUsers 
+  getRegisteredUserById 
 } from '../utils/userSearch';
 
 interface DirectMessagesModalProps {
@@ -88,123 +83,6 @@ interface ChatContact {
   online: boolean;
   category?: 'primary' | 'general';
 }
-
-const DEFAULT_CONTACTS: ChatContact[] = [
-  {
-    id: 'u-alex',
-    name: 'Alex Creates',
-    username: 'alex_creates',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-    lastMessage: 'Hey! Loved your recent story ✨',
-    time: '2m ago',
-    unread: true,
-    online: true,
-    category: 'primary',
-  },
-  {
-    id: 'u-maya',
-    name: 'Maya Beats',
-    username: 'maya_beats',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80',
-    lastMessage: 'Are you hopping in the voice chatroom today? 🎧',
-    time: '24m ago',
-    unread: false,
-    online: true,
-    category: 'primary',
-  },
-  {
-    id: 'u-kai',
-    name: 'Kai DJ',
-    username: 'kai_dj',
-    avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
-    lastMessage: 'Sent a voice clip',
-    time: '1h ago',
-    unread: false,
-    online: false,
-    category: 'general',
-  },
-  {
-    id: 'u-shoebell',
-    name: 'Noise Official',
-    username: 'shoebell_shoe',
-    avatar: '',
-    lastMessage: 'Welcome to Noise! Enjoy the music & stories 🚀',
-    time: '1d ago',
-    unread: false,
-    online: true,
-    category: 'primary',
-  },
-];
-
-const DEFAULT_THREADS: Record<string, Message[]> = {
-  'u-alex': [
-    {
-      id: 'm1',
-      sender: 'alex_creates',
-      text: 'Hey! Welcome to Noise Direct 👋',
-      time: '10:15 AM',
-      isMe: false,
-      reaction: '❤️',
-    },
-    {
-      id: 'm2',
-      sender: 'alex_creates',
-      text: 'Loved your recent story and photos! What camera filter was that?',
-      time: '10:16 AM',
-      isMe: false,
-    },
-  ],
-  'u-maya': [
-    {
-      id: 'm3',
-      sender: 'maya_beats',
-      text: 'Hey! We are hosting a live lofi music room later tonight 🎵',
-      time: '11:20 AM',
-      isMe: false,
-    },
-    {
-      id: 'm4',
-      sender: 'maya_beats',
-      text: 'Are you hopping in the voice chatroom today? 🎧',
-      time: '11:21 AM',
-      isMe: false,
-    },
-  ],
-  'u-kai': [
-    {
-      id: 'm5',
-      sender: 'kai_dj',
-      text: 'Check out the new mix I uploaded to Reels!',
-      time: 'Yesterday',
-      isMe: false,
-    },
-    {
-      id: 'm6',
-      sender: 'kai_dj',
-      text: '',
-      voiceDuration: '0:14',
-      time: 'Yesterday',
-      isMe: false,
-    },
-  ],
-  'u-shoebell': [
-    {
-      id: 'm7',
-      sender: 'shoebell_shoe',
-      text: 'Welcome to Noise! Create posts, stream voice chatrooms, and connect with people 🚀',
-      time: '2 days ago',
-      isMe: false,
-    },
-  ],
-};
-
-const SUGGESTED_USERS = [
-  { name: 'Alex Creates', username: 'alex_creates', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80' },
-  { name: 'Maya Beats', username: 'maya_beats', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=200&q=80' },
-  { name: 'Kai DJ', username: 'kai_dj', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80' },
-  { name: 'Elena Visuals', username: 'elena_lens', avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=200&q=80' },
-  { name: 'Noise Official', username: 'shoebell_shoe', avatar: '' },
-];
 
 const ContactAvatar: React.FC<{ contact: ChatContact; className?: string; size?: 'sm' | 'md' | 'lg' | 'xl' }> = ({
   contact,
@@ -243,7 +121,7 @@ const ContactAvatar: React.FC<{ contact: ChatContact; className?: string; size?:
       <div
         className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-rose-500 via-purple-600 to-indigo-600 border border-[#3a1af2]/40 flex items-center justify-center font-bold text-white uppercase select-none shadow-md ${className}`}
       >
-        {contact.name.charAt(0)}
+        {contact.name ? contact.name.charAt(0) : '?'}
       </div>
       {contact.online && (
         <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-zinc-950 shadow-sm" />
@@ -259,12 +137,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   initialTargetUsername,
   initialTargetUser,
 }) => {
+  // Pure database states (no dummy records)
   const [contacts, setContacts] = useState<ChatContact[]>(() => {
     try {
       const saved = localStorage.getItem('noise_dm_contacts');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return DEFAULT_CONTACTS;
+    return [];
   });
 
   const [threads, setThreads] = useState<Record<string, Message[]>>(() => {
@@ -272,7 +151,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       const saved = localStorage.getItem('noise_dm_threads');
       if (saved) return JSON.parse(saved);
     } catch {}
-    return DEFAULT_THREADS;
+    return {};
   });
 
   const [selectedContact, setSelectedContact] = useState<ChatContact | null>(null);
@@ -285,7 +164,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [audioRecordSeconds, setAudioRecordSeconds] = useState(0);
 
-  // Enhancements for rich inbox experience
+  // Rich inbox interactions
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -294,7 +173,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [threadSearchQuery, setThreadSearchQuery] = useState('');
   const [showThreadSearch, setShowThreadSearch] = useState(false);
 
-  // WebRTC Live Voice Chat state
+  // WebRTC Call state
   const [activeCall, setActiveCall] = useState<{
     type: 'audio' | 'video';
     user: ChatContact;
@@ -316,7 +195,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const recordTimerRef = useRef<any>(null);
   const callTimerRef = useRef<any>(null);
 
-  // Auto-scroll to bottom of messages
+  // Auto-scroll to bottom of thread
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [threads, selectedContact, isTyping]);
@@ -329,14 +208,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     } catch {}
   }, [contacts, threads]);
 
-  // Real database suggested users for compose
+  // Suggested users strictly from Firestore database
   const [dbSuggestedUsers, setDbSuggestedUsers] = useState<PublicUserProfile[]>([]);
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && currentUser) {
       getSuggestedDatabaseUsers(currentUser, 8)
         .then((users) => {
-          setDbSuggestedUsers(users);
+          setDbSuggestedUsers(users || []);
         })
         .catch((err) => {
           console.debug('Failed to fetch suggested database users:', err);
@@ -346,9 +225,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
   // Real-Time Direct Messages Listener from Firestore
   useEffect(() => {
-    if (!isFirebaseConfigured || !db || !currentUser) return;
+    if (!isFirebaseConfigured || !db || !currentUser?.uid) return;
 
-    const dmsQuery = query(collection(db, 'direct_messages'));
+    // Filter directly from server to fetch only conversations involving current user
+    const dmsQuery = query(
+      collection(db, 'direct_messages'),
+      where('participants', 'array-contains', currentUser.uid)
+    );
+
     const unsubscribe = onSnapshot(
       dmsQuery,
       (snapshot) => {
@@ -371,18 +255,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           const data = docSnap.data();
           const senderId = String(data.senderId || '');
           const receiverId = String(data.receiverId || '');
-          const participants: string[] = Array.isArray(data.participants) ? data.participants : [senderId, receiverId];
 
           const isSender = senderId === currentUser.uid;
-          const isReceiver =
-            receiverId === currentUser.uid ||
-            (currentUser.username && receiverId.toLowerCase() === currentUser.username.toLowerCase()) ||
-            (currentUser.username && receiverId.toLowerCase() === `u-${currentUser.username.toLowerCase()}`);
-          const isParticipant = participants.includes(currentUser.uid) || isSender || isReceiver;
-
-          if (!isParticipant) return;
-
           const peerId = isSender ? receiverId : senderId;
+
           if (!peerId || peerId === currentUser.uid) return;
 
           const peerUsername = isSender
@@ -432,29 +308,15 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           }
         });
 
-        // Merge messages into threads state
-        setThreads((prev) => {
-          const merged = { ...prev };
-          for (const [pid, list] of Object.entries(remoteThreads)) {
-            const existingList = merged[pid] || [];
-            const msgMap = new Map<string, Message>();
-            existingList.forEach((m) => msgMap.set(m.id, m));
-            list.forEach((m) => msgMap.set(m.id, m));
-            merged[pid] = Array.from(msgMap.values()).sort((a, b) => a.id.localeCompare(b.id));
-          }
-          return merged;
-        });
+        // Update threads
+        setThreads(remoteThreads);
 
-        // Update contacts with real incoming conversation partners
+        // Update contacts with real conversation partners
         if (contactUpdates.size > 0) {
           setContacts((prevContacts) => {
             const updated = [...prevContacts];
             for (const [peerId, meta] of contactUpdates.entries()) {
-              const idx = updated.findIndex(
-                (c) =>
-                  c.id === peerId ||
-                  (meta.peerUsername && c.username.toLowerCase() === meta.peerUsername.toLowerCase())
-              );
+              const idx = updated.findIndex((c) => c.id === peerId);
               if (idx >= 0) {
                 updated[idx] = {
                   ...updated[idx],
@@ -492,7 +354,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     return () => unsubscribe();
   }, [currentUser, selectedContact?.id]);
 
-  // Open initial target user or username if requested with real database ID
+  // Handle opening directly to a specific target user
   useEffect(() => {
     if (!isOpen) return;
 
@@ -502,15 +364,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       const existing = contacts.find((c) => c.id === targetId || (cleanHandle && c.username.toLowerCase() === cleanHandle));
 
       if (existing) {
-        setSelectedContact({
-          ...existing,
-          id: targetId,
-          name: initialTargetUser.displayName || existing.name,
-          avatar: initialTargetUser.avatar || existing.avatar,
-        });
+        setSelectedContact(existing);
       } else {
         const newContact: ChatContact = {
-          id: targetId, // Real database ID
+          id: targetId,
           name: initialTargetUser.displayName || (cleanHandle ? cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1) : 'User'),
           username: cleanHandle || targetId.slice(0, 8),
           avatar: initialTargetUser.avatar || '',
@@ -533,12 +390,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         setSelectedContact(existing);
       } else {
         getRegisteredUserById(cleanHandle).then((dbUser) => {
-          const targetId = dbUser?.uid || cleanHandle;
+          if (!dbUser) return;
+          const targetId = dbUser.uid;
           const newContact: ChatContact = {
-            id: targetId, // Real database ID
-            name: dbUser?.displayName || cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1),
-            username: dbUser?.username || cleanHandle,
-            avatar: dbUser?.avatar || '',
+            id: targetId,
+            name: dbUser.displayName || cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1),
+            username: dbUser.username || cleanHandle,
+            avatar: dbUser.avatar || '',
             lastMessage: 'Started new conversation',
             time: 'Just now',
             unread: false,
@@ -552,7 +410,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [initialTargetUsername, initialTargetUser, isOpen]);
 
-  // Handle call timer for active connected calls
+  // Call timer management
   useEffect(() => {
     if (activeCall && activeCall.status === 'connected') {
       callTimerRef.current = setInterval(() => {
@@ -562,7 +420,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [activeCall?.status]);
 
-  // Initialize and manage WebRTC voice chat manager
+  // WebRTC voice manager initialization
   useEffect(() => {
     const manager = new WebRTCVoiceManager({
       onStatusChange: (newStatus) => {
@@ -586,12 +444,9 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         setRemoteAudioLevel(lvl);
       },
       onIncomingCall: (incoming) => {
-        const myHandle = (currentUser?.username || '').toLowerCase();
         const myUid = currentUser?.uid || '';
-        const recHandle = (incoming.receiver.username || '').toLowerCase();
         const recUid = incoming.receiver.uid || '';
-
-        if ((myHandle && recHandle === myHandle) || (myUid && recUid === myUid)) {
+        if (myUid && recUid === myUid) {
           setIncomingCall(incoming);
         }
       },
@@ -602,46 +457,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     return () => {
       manager.destroy();
       voiceManagerRef.current = null;
+      if (callTimerRef.current) clearInterval(callTimerRef.current);
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
     };
-  }, [currentUser?.username, currentUser?.uid]);
-
-  // Firestore real-time incoming call listener
-  useEffect(() => {
-    if (!isFirebaseConfigured || !db || !currentUser) return;
-    const myHandle = (currentUser.username || '').toLowerCase();
-
-    try {
-      const callsCol = collection(db, 'calls');
-      const q = query(callsCol);
-      const unsub = onSnapshot(q, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === 'added' || change.type === 'modified') {
-            const data = change.doc.data() as CallSessionData;
-            if (
-              data.status === 'calling' &&
-              data.receiver?.username?.toLowerCase() === myHandle &&
-              Date.now() - (data.createdAt || 0) < 60000 &&
-              (!activeCall || activeCall.status === 'ended')
-            ) {
-              setIncomingCall(data);
-            } else if (
-              incomingCall &&
-              incomingCall.id === data.id &&
-              (data.status === 'ended' || data.status === 'rejected')
-            ) {
-              setIncomingCall(null);
-            }
-          }
-        });
-      }, (e) => {
-        console.debug('Calls snapshot note:', e);
-      });
-
-      return () => unsub();
-    } catch (e) {
-      console.debug('Firestore incoming listener note:', e);
-    }
-  }, [currentUser?.username, activeCall?.status, incomingCall?.id]);
+  }, [currentUser?.uid]);
 
   if (!isOpen) return null;
 
@@ -660,7 +479,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const handleSendMessage = async (textToSend?: string, attachedImage?: string, voiceDuration?: string) => {
     const text = textToSend !== undefined ? textToSend : inputText.trim();
     if (!text && !attachedImage && !voiceDuration) return;
-    if (!selectedContact) return;
+    if (!selectedContact || !currentUser) return;
 
     const targetContactId = selectedContact.id;
     const targetUsername = selectedContact.username;
@@ -668,7 +487,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     const localMsgId = `msg-${Date.now()}`;
     const newMsg: Message = {
       id: localMsgId,
-      sender: currentUser?.username || 'me',
+      sender: currentUser.username || 'me',
       text: text,
       image: attachedImage,
       voiceDuration: voiceDuration,
@@ -697,8 +516,8 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       setInputText('');
     }
 
-    // Live Real-Time Firestore Direct Message Delivery
-    if (isFirebaseConfigured && db && currentUser) {
+    // Direct Firestore Database Delivery
+    if (isFirebaseConfigured && db) {
       try {
         const convId = [currentUser.uid, targetContactId].sort().join('_');
         await addDoc(collection(db, 'direct_messages'), {
@@ -726,7 +545,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   };
 
-  // Image attachment
   const handleImageAttachment = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -739,7 +557,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     reader.readAsDataURL(file);
   };
 
-  // Simulated Voice Note recording
   const startVoiceRecording = () => {
     setIsRecordingAudio(true);
     setAudioRecordSeconds(0);
@@ -758,7 +575,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setAudioRecordSeconds(0);
   };
 
-  // Voice playback simulation
   const handleToggleVoicePlayback = (msgId: string) => {
     if (playingVoiceId === msgId) {
       setPlayingVoiceId(null);
@@ -770,7 +586,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   };
 
-  // Toggle emoji reaction on message
   const handleToggleReaction = async (msgId: string, emoji: string) => {
     if (!selectedContact) return;
     setThreads((prev) => ({
@@ -780,7 +595,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       ),
     }));
 
-    if (isFirebaseConfigured && db && !msgId.startsWith('msg-') && !msgId.startsWith('m')) {
+    if (isFirebaseConfigured && db && !msgId.startsWith('msg-')) {
       try {
         await updateDoc(doc(db, 'direct_messages', msgId), {
           reaction: emoji,
@@ -791,7 +606,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   };
 
-  // Delete/unsend message
   const handleDeleteMessage = async (msgId: string) => {
     if (!selectedContact) return;
     setThreads((prev) => {
@@ -811,7 +625,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       return { ...prev, [selectedContact.id]: updated };
     });
 
-    if (isFirebaseConfigured && db && !msgId.startsWith('msg-') && !msgId.startsWith('m')) {
+    if (isFirebaseConfigured && db && !msgId.startsWith('msg-')) {
       try {
         await deleteDoc(doc(db, 'direct_messages', msgId));
       } catch (err) {
@@ -820,14 +634,12 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   };
 
-  // Copy message text
   const handleCopyMessage = (msgId: string, text: string) => {
     navigator.clipboard?.writeText(text);
     setCopiedId(msgId);
     setTimeout(() => setCopiedId(null), 1500);
   };
 
-  // Clear thread history
   const handleClearThread = () => {
     if (!selectedContact) return;
     setThreads((prev) => ({ ...prev, [selectedContact.id]: [] }));
@@ -837,7 +649,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setIsThreadMenuOpen(false);
   };
 
-  // Start new chat with real database user ID
+  // Start new chat with real database registered user
   const handleStartNewChat = async (e?: React.FormEvent, customHandle?: string) => {
     if (e) e.preventDefault();
     const handle = (customHandle || newChatInput).trim().replace(/^@/, '');
@@ -852,13 +664,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
 
     const dbUser = await getRegisteredUserById(handle);
-    const targetId = dbUser?.uid || handle;
+    if (!dbUser || !dbUser.uid) {
+      alert(`User @${handle} was not found in the database.`);
+      return;
+    }
 
     const newContact: ChatContact = {
-      id: targetId, // Real database primary key ID
-      name: dbUser?.displayName || handle.charAt(0).toUpperCase() + handle.slice(1),
-      username: dbUser?.username || handle.toLowerCase(),
-      avatar: dbUser?.avatar || '',
+      id: dbUser.uid,
+      name: dbUser.displayName || handle.charAt(0).toUpperCase() + handle.slice(1),
+      username: dbUser.username || handle.toLowerCase(),
+      avatar: dbUser.avatar || '',
       lastMessage: 'Started new conversation',
       time: 'Just now',
       unread: false,
@@ -872,16 +687,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setNewChatInput('');
   };
 
-  // Real WebRTC Voice Call Functions
+  // WebRTC Voice Call logic
   const startCall = async (type: 'audio' | 'video' = 'audio') => {
-    if (!selectedContact) return;
+    if (!selectedContact || !currentUser) return;
     setVoiceError(null);
 
     const caller = {
-      uid: currentUser?.uid || 'guest-user',
-      username: currentUser?.username || 'user',
-      displayName: currentUser?.displayName || currentUser?.username || 'User',
-      avatar: currentUser?.photoURL,
+      uid: currentUser.uid,
+      username: currentUser.username || 'user',
+      displayName: currentUser.displayName || currentUser.username || 'User',
+      avatar: currentUser.photoURL,
     };
 
     const receiver = {
@@ -916,13 +731,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (!incomingCall) return;
     setVoiceError(null);
 
-    const callerHandle = incomingCall.caller.username;
-    let contact = contacts.find((c) => c.username.toLowerCase() === callerHandle.toLowerCase());
+    const callerUid = incomingCall.caller.uid;
+    let contact = contacts.find((c) => c.id === callerUid);
     if (!contact) {
       contact = {
-        id: incomingCall.caller.uid || `u-${callerHandle}`,
-        name: incomingCall.caller.displayName || callerHandle,
-        username: callerHandle,
+        id: callerUid,
+        name: incomingCall.caller.displayName || incomingCall.caller.username,
+        username: incomingCall.caller.username,
         avatar: incomingCall.caller.avatar || '',
         lastMessage: 'Voice Call',
         time: 'Just now',
@@ -1032,7 +847,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         {/* INBOX LIST VIEW */}
         {!selectedContact && (
           <div className="flex flex-col h-full">
-            {/* Header */}
             <div className="px-4 py-3.5 border-b border-zinc-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="font-brand text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500">
@@ -1088,10 +902,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </button>
                 </form>
 
-                {/* Suggested registered user chips */}
+                {/* Suggested registered users strictly from Firestore */}
                 {dbSuggestedUsers.length > 0 && (
                   <div className="pt-1">
-                    <p className="text-[10px] text-zinc-400 font-semibold mb-1.5 uppercase tracking-wider">Suggested from database:</p>
+                    <p className="text-[10px] text-zinc-400 font-semibold mb-1.5 uppercase tracking-wider">Suggested users:</p>
                     <div className="flex flex-wrap gap-1.5">
                       {dbSuggestedUsers.map((u) => (
                         <button
@@ -1124,7 +938,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </div>
             </div>
 
-            {/* Inbox Filter Tabs: Primary / General */}
+            {/* Filter Tabs */}
             <div className="flex border-b border-zinc-900 text-xs font-semibold">
               <button
                 type="button"
@@ -1152,15 +966,15 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </button>
             </div>
 
-            {/* Conversation List */}
+            {/* Real Conversations List */}
             <div className="flex-1 overflow-y-auto divide-y divide-zinc-900/80">
               {filteredContacts.length === 0 ? (
                 <div className="text-center py-20 px-4 text-zinc-500 text-xs">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3 text-zinc-400">
                     <Send className="w-5 h-5 -rotate-12" />
                   </div>
-                  <p className="font-bold text-zinc-300 text-sm mb-1">No messages here</p>
-                  <p>Send photos, voice notes, and private messages to friends.</p>
+                  <p className="font-bold text-zinc-300 text-sm mb-1">No messages yet</p>
+                  <p>Click the + icon above to search for a user and start a conversation.</p>
                 </div>
               ) : (
                 filteredContacts.map((contact) => (
@@ -1201,7 +1015,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         {/* CHAT THREAD VIEW */}
         {selectedContact && (
           <div className="flex flex-col h-full">
-            {/* Chat Thread Header */}
             <div className="px-3 py-2.5 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md relative">
               <div className="flex items-center gap-2.5 min-w-0">
                 <button
@@ -1232,7 +1045,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 </div>
               </div>
 
-              {/* Action Buttons: Audio Call, Video Call, Search, Thread Menu, Close */}
+              {/* Action Buttons */}
               <div className="flex items-center gap-1 flex-none">
                 <button
                   onClick={() => startCall('audio')}
@@ -1251,7 +1064,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   <Video className="w-4 h-4" />
                 </button>
                 
-                {/* 3-dots thread menu */}
                 <div className="relative">
                   <button
                     onClick={() => setIsThreadMenuOpen(!isThreadMenuOpen)}
@@ -1263,7 +1075,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </button>
 
                   {isThreadMenuOpen && (
-                    <div className="absolute right-0 top-full mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl py-1 z-30 animate-in fade-in zoom-in-95">
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl py-1 z-30">
                       <button
                         onClick={() => {
                           setShowThreadSearch(!showThreadSearch);
@@ -1308,7 +1120,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
             {/* In-Thread Search Bar */}
             {showThreadSearch && (
-              <div className="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center gap-2 animate-in fade-in">
+              <div className="px-3 py-2 bg-zinc-900 border-b border-zinc-800 flex items-center gap-2">
                 <Search className="w-3.5 h-3.5 text-zinc-500" />
                 <input
                   type="text"
@@ -1326,31 +1138,8 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </div>
             )}
 
-            {/* Live WebRTC Voice Chat Banner inside Chat Room */}
-            <div className="px-3.5 py-2 bg-gradient-to-r from-purple-950/40 via-zinc-900/90 to-indigo-950/40 border-b border-zinc-800/80 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-none" />
-                <span className="text-zinc-200 font-medium truncate text-[11px]">
-                  Free Live WebRTC Voice Chat
-                </span>
-                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-zinc-400 font-mono">
-                  Google STUN
-                </span>
-              </div>
-              <button
-                onClick={() => startCall('audio')}
-                className="px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer flex-none shadow-xs"
-                type="button"
-                title="Start Voice Chat with this user"
-              >
-                <Phone className="w-3 h-3 text-emerald-400" />
-                <span>Voice Call</span>
-              </button>
-            </div>
-
             {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-950">
-              {/* User Profile Info Card in Chat */}
               <div className="text-center py-5 border-b border-zinc-900 mb-3">
                 <div className="flex justify-center mb-2">
                   <ContactAvatar contact={selectedContact} size="lg" className="ring-2 ring-[#3a1af2]/50 shadow-xl" />
@@ -1363,135 +1152,117 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     </span>
                   )}
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">@{selectedContact.username} • Instagram Direct</p>
-                <p className="text-[10px] text-zinc-500 mt-1">End-to-end encrypted messaging</p>
+                <p className="text-xs text-zinc-400 mt-0.5">@{selectedContact.username}</p>
               </div>
 
-              {/* Message Bubbles */}
-              {activeMessages.map((msg) => (
-                <div key={msg.id} className={`flex flex-col group ${msg.isMe ? 'items-end' : 'items-start'}`}>
-                  <div className="relative max-w-[82%]">
-                    {/* Attached Photo */}
-                    {msg.image && (
-                      <div 
-                        onClick={() => setLightboxImage(msg.image || null)}
-                        className="mb-1 rounded-2xl overflow-hidden border border-zinc-800 max-w-[240px] shadow-lg cursor-pointer hover:opacity-95 transition-opacity group/img relative"
-                      >
-                        <img src={msg.image} alt="Attachment" className="w-full h-auto object-cover" />
-                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
-                          <Maximize2 className="w-5 h-5 text-white drop-shadow" />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Voice Note Clip with Playback */}
-                    {msg.voiceDuration && (
-                      <div className={`px-3.5 py-2.5 rounded-2xl flex items-center gap-2.5 shadow-md ${
-                        msg.isMe 
-                          ? 'bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 text-white rounded-br-xs' 
-                          : 'bg-zinc-900 border border-zinc-800 text-white rounded-bl-xs'
-                      }`}>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleVoicePlayback(msg.id)}
-                          className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all active:scale-90"
-                          title={playingVoiceId === msg.id ? "Pause Voice Clip" : "Play Voice Clip"}
+              {activeMessages.length === 0 ? (
+                <div className="text-center py-8 text-zinc-500 text-xs">
+                  No messages yet. Send a greeting to start chatting!
+                </div>
+              ) : (
+                activeMessages.map((msg) => (
+                  <div key={msg.id} className={`flex flex-col group ${msg.isMe ? 'items-end' : 'items-start'}`}>
+                    <div className="relative max-w-[82%]">
+                      {msg.image && (
+                        <div 
+                          onClick={() => setLightboxImage(msg.image || null)}
+                          className="mb-1 rounded-2xl overflow-hidden border border-zinc-800 max-w-[240px] shadow-lg cursor-pointer hover:opacity-95 transition-opacity relative group/img"
                         >
-                          {playingVoiceId === msg.id ? (
-                            <Pause className="w-4 h-4 fill-current" />
-                          ) : (
-                            <Play className="w-4 h-4 fill-current ml-0.5" />
-                          )}
-                        </button>
-                        <div className="flex items-center gap-1">
-                          <div className={`w-1 rounded-full transition-all duration-200 ${playingVoiceId === msg.id ? 'h-4 bg-white animate-pulse' : 'h-3 bg-white/80'}`} />
-                          <div className={`w-1 rounded-full transition-all duration-200 ${playingVoiceId === msg.id ? 'h-6 bg-white' : 'h-5 bg-white/90'}`} />
-                          <div className={`w-1 rounded-full transition-all duration-200 ${playingVoiceId === msg.id ? 'h-3 bg-white' : 'h-2 bg-white/60'}`} />
-                          <div className={`w-1 rounded-full transition-all duration-200 ${playingVoiceId === msg.id ? 'h-5 bg-white' : 'h-4 bg-white/80'}`} />
-                          <div className={`w-1 rounded-full transition-all duration-200 ${playingVoiceId === msg.id ? 'h-4 bg-white' : 'h-3 bg-white/60'}`} />
+                          <img src={msg.image} alt="Attachment" className="w-full h-auto object-cover" />
+                          <div className="absolute inset-0 bg-black/20 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity">
+                            <Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                          </div>
                         </div>
-                        <span className="text-[10px] font-mono opacity-90">{msg.voiceDuration}</span>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Message Text Bubble */}
-                    {msg.text && (
-                      <div 
-                        onDoubleClick={() => handleToggleReaction(msg.id, '❤️')}
-                        className={`px-4 py-2.5 text-xs leading-relaxed transition-all cursor-pointer ${
+                      {msg.voiceDuration && (
+                        <div className={`px-3.5 py-2.5 rounded-2xl flex items-center gap-2.5 shadow-md ${
                           msg.isMe 
-                            ? 'bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-md' 
-                            : 'bg-zinc-900 text-zinc-100 rounded-2xl rounded-bl-xs border border-zinc-800'
-                        }`}
-                      >
-                        <p className="whitespace-pre-wrap">{msg.text}</p>
-                      </div>
-                    )}
+                            ? 'bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 text-white rounded-br-xs' 
+                            : 'bg-zinc-900 border border-zinc-800 text-white rounded-bl-xs'
+                        }`}>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleVoicePlayback(msg.id)}
+                            className="w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all active:scale-90"
+                            title={playingVoiceId === msg.id ? "Pause Voice Clip" : "Play Voice Clip"}
+                          >
+                            {playingVoiceId === msg.id ? (
+                              <Pause className="w-4 h-4 fill-current" />
+                            ) : (
+                              <Play className="w-4 h-4 fill-current ml-0.5" />
+                            )}
+                          </button>
+                          <span className="text-[10px] font-mono opacity-90">{msg.voiceDuration}</span>
+                        </div>
+                      )}
 
-                    {/* Reaction Badge on Bubble */}
-                    {msg.reaction && (
-                      <div className="absolute -bottom-2 right-1 bg-zinc-900 border border-zinc-800 rounded-full px-1.5 py-0.5 text-xs shadow-md animate-in zoom-in-75">
-                        {msg.reaction}
-                      </div>
-                    )}
-
-                    {/* Hover Reaction & Actions Toolbar */}
-                    <div className="absolute -top-7 right-0 hidden group-hover:flex items-center gap-1 bg-zinc-900/95 border border-zinc-800 rounded-full px-2 py-0.5 shadow-xl z-10 backdrop-blur-sm">
-                      {['❤️', '🔥', '😂', '👏', '😍'].map((emoji) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          onClick={() => handleToggleReaction(msg.id, emoji)}
-                          className="hover:scale-130 transition-transform text-xs"
-                        >
-                          {emoji}
-                        </button>
-                      ))}
-
-                      {/* Copy message button */}
                       {msg.text && (
-                        <button
-                          type="button"
-                          onClick={() => handleCopyMessage(msg.id, msg.text)}
-                          className="hover:scale-120 transition-transform text-zinc-400 hover:text-white p-0.5"
-                          title="Copy text"
+                        <div 
+                          onDoubleClick={() => handleToggleReaction(msg.id, '❤️')}
+                          className={`px-4 py-2.5 text-xs leading-relaxed transition-all cursor-pointer ${
+                            msg.isMe 
+                              ? 'bg-gradient-to-r from-rose-600 via-purple-600 to-indigo-600 text-white rounded-2xl rounded-br-xs shadow-md' 
+                              : 'bg-zinc-900 text-zinc-100 rounded-2xl rounded-bl-xs border border-zinc-800'
+                          }`}
                         >
-                          {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        </button>
+                          <p className="whitespace-pre-wrap">{msg.text}</p>
+                        </div>
                       )}
 
-                      {/* Delete/unsend message button */}
-                      {msg.isMe && (
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteMessage(msg.id)}
-                          className="hover:scale-120 transition-transform text-zinc-400 hover:text-rose-400 p-0.5"
-                          title="Unsend Message"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
+                      {msg.reaction && (
+                        <div className="absolute -bottom-2 right-1 bg-zinc-900 border border-zinc-800 rounded-full px-1.5 py-0.5 text-xs shadow-md">
+                          {msg.reaction}
+                        </div>
                       )}
+
+                      {/* Message Actions */}
+                      <div className="absolute -top-7 right-0 hidden group-hover:flex items-center gap-1 bg-zinc-900/95 border border-zinc-800 rounded-full px-2 py-0.5 shadow-xl z-10 backdrop-blur-sm">
+                        {['❤️', '🔥', '😂', '👏', '😍'].map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => handleToggleReaction(msg.id, emoji)}
+                            className="hover:scale-130 transition-transform text-xs"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+
+                        {msg.text && (
+                          <button
+                            type="button"
+                            onClick={() => handleCopyMessage(msg.id, msg.text)}
+                            className="hover:scale-120 transition-transform text-zinc-400 hover:text-white p-0.5"
+                            title="Copy text"
+                          >
+                            {copiedId === msg.id ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        )}
+
+                        {msg.isMe && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteMessage(msg.id)}
+                            className="hover:scale-120 transition-transform text-zinc-400 hover:text-rose-400 p-0.5"
+                            title="Unsend Message"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-[9px] text-zinc-500 mt-1 px-1">
+                      <span>{msg.time}</span>
+                      {msg.isMe && <CheckCheck className="w-3 h-3 text-sky-400 inline" />}
                     </div>
                   </div>
+                ))
+              )}
 
-                  {/* Timestamp & Read Receipt */}
-                  <div className="flex items-center gap-1 text-[9px] text-zinc-500 mt-1 px-1">
-                    <span>{msg.time}</span>
-                    {msg.isMe && (
-                      <CheckCheck className="w-3 h-3 text-sky-400 inline" />
-                    )}
-                  </div>
-                </div>
-              ))}
-
-              {/* Typing Indicator */}
               {isTyping && (
-                <div className="flex items-center gap-2 text-zinc-400 text-xs py-1 animate-in fade-in">
-                  <div className="px-3.5 py-2 bg-zinc-900 border border-zinc-800 rounded-full flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce" />
-                    <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                    <span className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce [animation-delay:0.4s]" />
-                  </div>
+                <div className="flex items-center gap-2 text-zinc-400 text-xs py-1">
                   <span className="text-[10px] text-zinc-500">{selectedContact.name} is typing...</span>
                 </div>
               )}
@@ -1514,10 +1285,9 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               ))}
             </div>
 
-            {/* Chat Input & Recording Bar */}
+            {/* Chat Input Bar */}
             <div className="p-3 border-t border-zinc-800/80 bg-zinc-950 flex flex-col gap-2">
               {isRecordingAudio ? (
-                /* Live Voice Note Recording Bar */
                 <div className="flex items-center justify-between p-2 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-400 px-4 animate-pulse">
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
@@ -1543,7 +1313,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </div>
                 </div>
               ) : (
-                /* Standard Message Input Form */
                 <form 
                   onSubmit={(e) => { 
                     e.preventDefault(); 
@@ -1551,7 +1320,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   }} 
                   className="flex items-center gap-2"
                 >
-                  {/* Photo Attachment Button */}
                   <button 
                     type="button" 
                     onClick={() => fileInputRef.current?.click()} 
@@ -1562,7 +1330,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </button>
                   <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageAttachment} className="hidden" />
 
-                  {/* Mic Voice Note Button */}
                   <button
                     type="button"
                     onClick={startVoiceRecording}
@@ -1572,7 +1339,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     <Mic className="w-5 h-5" />
                   </button>
 
-                  {/* Text Input */}
                   <input
                     type="text"
                     value={inputText}
@@ -1581,7 +1347,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     className="flex-1 bg-zinc-900 text-xs text-zinc-100 placeholder-zinc-500 rounded-full px-4 py-2.5 border border-zinc-800 focus:outline-none focus:border-zinc-600 transition-colors"
                   />
 
-                  {/* Send or Heart Button */}
                   {inputText.trim() ? (
                     <button 
                       type="submit" 
@@ -1605,7 +1370,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           </div>
         )}
 
-        {/* PHOTO LIGHTBOX MODAL */}
+        {/* PHOTO LIGHTBOX */}
         {lightboxImage && (
           <div 
             onClick={() => setLightboxImage(null)}
@@ -1624,7 +1389,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           </div>
         )}
 
-        {/* INCOMING WEBRTC VOICE CALL MODAL */}
+        {/* INCOMING WEBRTC CALL */}
         {incomingCall && (
           <div className="absolute inset-x-3 top-3 z-60 bg-zinc-900/95 border border-purple-500/50 shadow-2xl rounded-2xl p-3.5 sm:p-4 backdrop-blur-xl animate-in slide-in-from-top-4 duration-200">
             <div className="flex items-center justify-between gap-3">
@@ -1641,7 +1406,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                       {incomingCall.caller.displayName?.charAt(0) || 'U'}
                     </div>
                   )}
-                  <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-zinc-950 animate-ping" />
                 </div>
 
                 <div className="min-w-0">
@@ -1655,17 +1419,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     {incomingCall.caller.displayName || incomingCall.caller.username}
                   </h4>
                   <p className="text-[10px] text-zinc-400 truncate">
-                    @{incomingCall.caller.username} • Free WebRTC P2P
+                    @{incomingCall.caller.username}
                   </p>
                 </div>
               </div>
 
-              {/* Accept & Reject Buttons */}
               <div className="flex items-center gap-2 flex-none">
                 <button
                   type="button"
                   onClick={handleRejectIncomingCall}
-                  className="p-2.5 sm:p-3 bg-zinc-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 rounded-full border border-zinc-700/80 hover:border-rose-500/40 transition-all active:scale-95 shadow-md cursor-pointer"
+                  className="p-2.5 sm:p-3 bg-zinc-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 rounded-full border border-zinc-700/80 transition-all active:scale-95"
                   title="Decline Call"
                 >
                   <PhoneOff className="w-4 h-4" />
@@ -1673,7 +1436,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 <button
                   type="button"
                   onClick={handleAcceptIncomingCall}
-                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-full font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-emerald-500/25 active:scale-95 cursor-pointer animate-pulse"
+                  className="px-3.5 sm:px-4 py-2 sm:py-2.5 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-full font-bold text-xs flex items-center gap-1.5 transition-all shadow-lg active:scale-95 animate-pulse"
                   title="Accept Call"
                 >
                   <Phone className="w-4 h-4" />
@@ -1684,42 +1447,26 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           </div>
         )}
 
-        {/* ACTIVE WEBRTC VOICE CALL OVERLAY */}
+        {/* ACTIVE WEBRTC VOICE CALL */}
         {activeCall && (
-          <div className="absolute inset-0 z-50 bg-zinc-950/98 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-6 text-center animate-in zoom-in-95 duration-200 overflow-y-auto">
-            {/* Top Bar */}
+          <div className="absolute inset-0 z-50 bg-zinc-950/98 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-6 text-center overflow-y-auto">
             <div className="w-full flex items-center justify-between">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>WebRTC Live Audio • Google STUN P2P</span>
+                <span>WebRTC Audio</span>
               </div>
               <button 
                 onClick={handleEndCall} 
-                className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-900 transition-colors cursor-pointer" 
+                className="text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-900 transition-colors" 
                 type="button"
-                title="Minimize or End"
+                title="End Call"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Main Caller Profile & Visualizer */}
             <div className="space-y-4 my-auto py-4">
               <div className="relative mx-auto w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
-                {/* Dynamic voice pulse rings reflecting remote speaker audio */}
-                {activeCall.status === 'connected' && (
-                  <>
-                    <div 
-                      className="absolute inset-0 rounded-full border-2 border-emerald-500/30 transition-transform duration-75"
-                      style={{ transform: `scale(${1 + (remoteAudioLevel / 100) * 0.4})` }}
-                    />
-                    <div 
-                      className="absolute inset-0 rounded-full border border-purple-500/40 transition-transform duration-100"
-                      style={{ transform: `scale(${1 + (remoteAudioLevel / 100) * 0.6})` }}
-                    />
-                  </>
-                )}
-
                 <ContactAvatar 
                   contact={activeCall.user} 
                   size="xl" 
@@ -1729,13 +1476,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                       : 'ring-purple-500/40 animate-pulse shadow-purple-500/20'
                   }`} 
                 />
-
-                {/* Local Mic Status Badge */}
                 <div 
                   className={`absolute -bottom-1 -right-1 p-1.5 rounded-full border-2 border-zinc-950 shadow-md ${
                     isMuted ? 'bg-rose-600 text-white' : 'bg-emerald-600 text-white'
                   }`}
-                  title={isMuted ? 'Microphone Muted' : 'Microphone Live'}
                 >
                   {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
                 </div>
@@ -1751,7 +1495,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 <p className="text-xs text-zinc-400">@{activeCall.user.username}</p>
               </div>
 
-              {/* Status Badge */}
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-xs font-mono">
                 {activeCall.status === 'connected' ? (
                   <>
@@ -1761,149 +1504,67 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     </span>
                   </>
                 ) : activeCall.status === 'calling' ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-ping" />
-                    <span className="text-purple-300">Calling... Waiting for answer</span>
-                  </>
-                ) : activeCall.status === 'ringing' ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
-                    <span className="text-purple-300">Ringing...</span>
-                  </>
+                  <span className="text-purple-300">Calling...</span>
                 ) : activeCall.status === 'connecting' ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-amber-300">Connecting P2P Audio...</span>
-                  </>
-                ) : activeCall.status === 'rejected' ? (
-                  <span className="text-rose-400 font-bold">Call Declined</span>
-                ) : activeCall.status === 'ended' ? (
-                  <span className="text-zinc-400">Call Ended</span>
+                  <span className="text-amber-300">Connecting...</span>
                 ) : (
-                  <span className="text-rose-400">Connection Failed</span>
+                  <span className="text-rose-400">Call Ended</span>
                 )}
               </div>
 
-              {/* Two-Way Audio Waveform Level Meters */}
-              <div className="max-w-xs mx-auto grid grid-cols-2 gap-3 pt-2 text-left">
-                {/* Local Mic Volume Meter */}
-                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5">
-                  <div className="flex items-center justify-between text-[11px] mb-1.5">
-                    <span className="text-zinc-400 flex items-center gap-1">
-                      <Mic className="w-3 h-3 text-zinc-400" />
-                      <span>You (Mic)</span>
-                    </span>
-                    <span className={`text-[10px] font-bold ${isMuted ? 'text-rose-400' : 'text-emerald-400'}`}>
-                      {isMuted ? 'Muted' : `${localAudioLevel}%`}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`h-full transition-all duration-75 rounded-full ${
-                        isMuted ? 'bg-rose-500/50 w-0' : 'bg-emerald-500'
-                      }`}
-                      style={{ width: `${isMuted ? 0 : localAudioLevel}%` }}
-                    />
-                  </div>
-                </div>
-
-                {/* Remote Speaker Volume Meter */}
-                <div className="bg-zinc-900/90 border border-zinc-800 rounded-xl p-2.5">
-                  <div className="flex items-center justify-between text-[11px] mb-1.5">
-                    <span className="text-zinc-400 flex items-center gap-1">
-                      <Volume2 className="w-3 h-3 text-zinc-400" />
-                      <span>{activeCall.user.name.split(' ')[0]}</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-purple-400">
-                      {activeCall.status === 'connected' ? `${remoteAudioLevel}%` : '—'}
-                    </span>
-                  </div>
-                  <div className="w-full h-1.5 bg-zinc-800 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 transition-all duration-75 rounded-full"
-                      style={{ width: `${activeCall.status === 'connected' ? remoteAudioLevel : 0}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Error Alert Box if any */}
               {voiceError && (
-                <div className="max-w-xs mx-auto p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-300 flex items-start gap-2 text-left animate-in fade-in">
+                <div className="max-w-xs mx-auto p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-xs text-rose-300 flex items-start gap-2 text-left">
                   <AlertCircle className="w-4 h-4 text-rose-400 flex-none mt-0.5" />
-                  <div className="space-y-1">
-                    <p className="font-semibold text-rose-200">{voiceError}</p>
-                    <p className="text-[11px] text-rose-400/80">
-                      Check your browser address bar permissions to ensure microphone access is granted for this site.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => startCall('audio')}
-                      className="px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white font-bold text-[10px] mt-1 transition-colors cursor-pointer"
-                    >
-                      Retry Connection
-                    </button>
-                  </div>
+                  <p>{voiceError}</p>
                 </div>
               )}
             </div>
 
-            {/* Interactive Call Controls Bar */}
+            {/* Controls */}
             <div className="space-y-4 pt-2 pb-2">
               <div className="flex items-center justify-center gap-4 sm:gap-6">
-                {/* Mute Microphone Button */}
                 <div className="flex flex-col items-center gap-1">
                   <button 
                     onClick={handleToggleMute} 
-                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 cursor-pointer shadow-lg ${
+                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 ${
                       isMuted 
-                        ? 'bg-rose-600/90 hover:bg-rose-500 text-white ring-2 ring-rose-500/50' 
+                        ? 'bg-rose-600/90 text-white' 
                         : 'bg-zinc-800 hover:bg-zinc-700 text-white'
                     }`} 
                     type="button"
-                    title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
                   >
                     {isMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
                   </button>
-                  <span className="text-[10px] text-zinc-400 font-medium">
-                    {isMuted ? 'Unmute' : 'Mute'}
-                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">{isMuted ? 'Unmute' : 'Mute'}</span>
                 </div>
 
-                {/* End Call Button */}
                 <div className="flex flex-col items-center gap-1">
                   <button 
                     onClick={handleEndCall} 
-                    className="p-4 sm:p-5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl shadow-red-600/30 hover:scale-105 active:scale-95 transition-all cursor-pointer" 
+                    className="p-4 sm:p-5 rounded-full bg-red-600 hover:bg-red-500 text-white shadow-xl hover:scale-105 active:scale-95 transition-all" 
                     type="button"
-                    title="End Call"
                   >
                     <PhoneOff className="w-6 h-6 sm:w-7 sm:h-7" />
                   </button>
-                  <span className="text-[10px] text-zinc-400 font-medium">End Call</span>
+                  <span className="text-[10px] text-zinc-400 font-medium">End</span>
                 </div>
 
-                {/* Speaker Volume Toggle / Slider */}
                 <div className="flex flex-col items-center gap-1">
                   <button 
                     onClick={handleToggleSpeaker} 
-                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 cursor-pointer shadow-lg ${
+                    className={`p-3.5 sm:p-4 rounded-full transition-all active:scale-95 ${
                       isSpeakerMuted 
-                        ? 'bg-amber-600/90 text-white ring-2 ring-amber-500/50' 
+                        ? 'bg-amber-600/90 text-white' 
                         : 'bg-zinc-800 hover:bg-zinc-700 text-white'
                     }`} 
                     type="button"
-                    title={isSpeakerMuted ? 'Unmute speaker' : 'Mute speaker'}
                   >
                     {isSpeakerMuted ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
                   </button>
-                  <span className="text-[10px] text-zinc-400 font-medium">
-                    {isSpeakerMuted ? 'Muted' : 'Speaker'}
-                  </span>
+                  <span className="text-[10px] text-zinc-400 font-medium">{isSpeakerMuted ? 'Muted' : 'Speaker'}</span>
                 </div>
               </div>
 
-              {/* Volume Slider Bar */}
               <div className="max-w-[200px] mx-auto flex items-center gap-2">
                 <Volume1 className="w-3.5 h-3.5 text-zinc-500" />
                 <input
@@ -1914,14 +1575,9 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   value={isSpeakerMuted ? 0 : speakerVolume}
                   onChange={(e) => handleSpeakerVolumeChange(parseFloat(e.target.value))}
                   className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-500"
-                  title="Speaker volume"
                 />
                 <Volume2 className="w-3.5 h-3.5 text-zinc-500" />
               </div>
-
-              <p className="text-[10px] text-zinc-500 max-w-xs mx-auto">
-                🔒 Free peer-to-peer WebRTC audio encrypted end-to-end. Public Google STUN servers handle NAT traversal with zero paid dependencies.
-              </p>
             </div>
           </div>
         )}
