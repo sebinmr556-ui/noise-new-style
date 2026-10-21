@@ -18,6 +18,57 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Grand+Hotel&display=swap" rel="stylesheet">
+
+    <!-- Emoji Screen Animations -->
+    <style>
+      /* അയക്കുന്ന ആൾക്ക്: വലുതായി തുടങ്ങി മുന്നിലേക്ക് പോയി ചെറുതായി മായുന്നു */
+      @keyframes senderEmojiBurst {
+        0% {
+          transform: translate(-50%, -50%) scale(2.8);
+          opacity: 0.95;
+          filter: blur(0px);
+        }
+        50% {
+          transform: translate(-50%, -60%) scale(1.6);
+          opacity: 0.8;
+        }
+        100% {
+          transform: translate(-50%, -85%) scale(0.3);
+          opacity: 0;
+          filter: blur(2px);
+        }
+      }
+
+      /* കിട്ടുന്ന ആൾക്ക്: ചെറുതിൽ നിന്ന് തുടങ്ങി വലുതായി മുന്നിലേക്ക് വരുന്നു */
+      @keyframes receiverEmojiBurst {
+        0% {
+          transform: translate(-50%, -50%) scale(0.2);
+          opacity: 0;
+          filter: blur(3px);
+        }
+        40% {
+          transform: translate(-50%, -50%) scale(1.8);
+          opacity: 0.95;
+          filter: blur(0px);
+        }
+        75% {
+          transform: translate(-50%, -50%) scale(3.2);
+          opacity: 0.7;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(4.5);
+          opacity: 0;
+        }
+      }
+
+      .animate-sender-emoji {
+        animation: senderEmojiBurst 1.8s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+      }
+
+      .animate-receiver-emoji {
+        animation: receiverEmojiBurst 2.0s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+    </style>
   </head>
   <body class="bg-black text-white antialiased overflow-x-hidden">
     <div id="root"></div>
