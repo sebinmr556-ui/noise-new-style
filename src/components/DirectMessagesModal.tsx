@@ -13,7 +13,6 @@ import {
   MicOff,
   PhoneOff,
   Check,
-  CheckCheck,
   Play,
   Pause,
   MoreVertical,
@@ -70,6 +69,8 @@ interface Message {
   time: string;
   isMe: boolean;
   reaction?: string;
+  timestamp?: number;
+  read?: boolean;
 }
 
 interface ChatContact {
@@ -137,7 +138,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   initialTargetUsername,
   initialTargetUser,
 }) => {
-  // Pure database states (no dummy records)
   const [contacts, setContacts] = useState<ChatContact[]>(() => {
     try {
       const saved = localStorage.getItem('noise_dm_contacts');
@@ -164,7 +164,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [isRecordingAudio, setIsRecordingAudio] = useState(false);
   const [audioRecordSeconds, setAudioRecordSeconds] = useState(0);
 
-  // Rich inbox interactions
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -173,7 +172,12 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [threadSearchQuery, setThreadSearchQuery] = useState('');
   const [showThreadSearch, setShowThreadSearch] = useState(false);
 
-  // WebRTC Call state
+  // Screen-level background animated emoji state
+  const [screenAnim, setScreenAnim] = useState<{
+    type: 'sender' | 'receiver';
+    emoji: string;
+  } | null>(null);
+
   const [activeCall, setActiveCall] = useState<{
     type: 'audio' | 'video';
     user: ChatContact;
@@ -195,12 +199,25 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const recordTimerRef = useRef<any>(null);
   const callTimerRef = useRef<any>(null);
 
-  // Auto-scroll to bottom of thread
+  // Helper function to check if text is purely emojis
+  const checkIsOnlyEmoji = (str: string) => {
+    const trimmed = str.trim();
+    if (!trimmed) return false;
+    return /^(\p{Extended_Pictographic}|\p{Emoji_Presentation})+$/u.test(trimmed);
+  };
+
+  // Trigger emoji animation
+  const triggerScreenEmoji = (emoji: string, role: 'sender' | 'receiver') => {
+    setScreenAnim({ type: role, emoji });
+    setTimeout(() => {
+      setScreenAnim((current) => (current?.emoji === emoji ? null : current));
+    }, 2000);
+  };
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [threads, selectedContact, isTyping]);
 
-  // Persist contacts and threads to localStorage
   useEffect(() => {
     try {
       localStorage.setItem('noise_dm_contacts', JSON.stringify(contacts));
@@ -208,7 +225,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     } catch {}
   }, [contacts, threads]);
 
-  // Suggested users strictly from Firestore database
   const [dbSuggestedUsers, setDbSuggestedUsers] = useState<PublicUserProfile[]>([]);
 
   useEffect(() => {
@@ -223,11 +239,29 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [isOpen, currentUser]);
 
-  // Real-Time Direct Messages Listener from Firestore
+  // മറുഭാഗത്തുനിന്നുള്ള മെസ്സേജ് കാണുമ്പോൾ read: true ആക്കുന്നു
+  useEffect(() => {
+    if (!selectedContact || !currentUser?.uid || !db) return;
+
+    const currentChatMsgs = threads[selectedContact.id] || [];
+    const unreadFromPeer = currentChatMsgs.filter(
+      (m) => !m.isMe && !m.read && !m.id.startsWith('msg-')
+    );
+
+    unreadFromPeer.forEach(async (m) => {
+      try {
+        await updateDoc(doc(db, 'direct_messages', m.id), {
+          read: true,
+        });
+      } catch (err) {
+        console.debug('Failed to mark message read:', err);
+      }
+    });
+  }, [selectedContact, threads, currentUser?.uid]);
+
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !currentUser?.uid) return;
 
-    // Filter directly from server to fetch only conversations involving current user
     const dmsQuery = query(
       collection(db, 'direct_messages'),
       where('participants', 'array-contains', currentUser.uid)
@@ -236,6 +270,19 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     const unsubscribe = onSnapshot(
       dmsQuery,
       (snapshot) => {
+        // റിസീവർക്ക് പുതിയ എമോജി വരുമ്പോൾ ആനിമേഷൻ ട്രിഗർ ചെയ്യുന്നു
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const data = change.doc.data();
+            const isSender = data.senderId === currentUser?.uid;
+            const msgText = (data.text || '').trim();
+
+            if (!isSender && checkIsOnlyEmoji(msgText) && selectedContact?.id === data.senderId) {
+              triggerScreenEmoji(msgText, 'receiver');
+            }
+          }
+        });
+
         const remoteThreads: Record<string, Message[]> = {};
         const contactUpdates = new Map<
           string,
@@ -285,6 +332,8 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             time: timeStr,
             isMe: isSender,
             reaction: data.reaction || undefined,
+            timestamp: timestamp,
+            read: Boolean(data.read),
           };
 
           if (!remoteThreads[peerId]) remoteThreads[peerId] = [];
@@ -308,10 +357,12 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           }
         });
 
-        // Update threads
+        for (const peerId in remoteThreads) {
+          remoteThreads[peerId].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        }
+
         setThreads(remoteThreads);
 
-        // Update contacts with real conversation partners
         if (contactUpdates.size > 0) {
           setContacts((prevContacts) => {
             const updated = [...prevContacts];
@@ -354,7 +405,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     return () => unsubscribe();
   }, [currentUser, selectedContact?.id]);
 
-  // Handle opening directly to a specific target user
   useEffect(() => {
     if (!isOpen) return;
 
@@ -410,7 +460,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [initialTargetUsername, initialTargetUser, isOpen]);
 
-  // Call timer management
   useEffect(() => {
     if (activeCall && activeCall.status === 'connected') {
       callTimerRef.current = setInterval(() => {
@@ -420,7 +469,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [activeCall?.status]);
 
-  // WebRTC voice manager initialization
   useEffect(() => {
     const manager = new WebRTCVoiceManager({
       onStatusChange: (newStatus) => {
@@ -481,10 +529,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (!text && !attachedImage && !voiceDuration) return;
     if (!selectedContact || !currentUser) return;
 
+    // Sender ആനിമേഷൻ ട്രിഗർ ചെയ്യുന്നു
+    if (text && checkIsOnlyEmoji(text)) {
+      triggerScreenEmoji(text, 'sender');
+    }
+
     const targetContactId = selectedContact.id;
     const targetUsername = selectedContact.username;
+    const nowTimestamp = Date.now();
 
-    const localMsgId = `msg-${Date.now()}`;
+    const localMsgId = `msg-${nowTimestamp}`;
     const newMsg: Message = {
       id: localMsgId,
       sender: currentUser.username || 'me',
@@ -493,6 +547,8 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       voiceDuration: voiceDuration,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isMe: true,
+      timestamp: nowTimestamp,
+      read: false,
     };
 
     setThreads((prev) => ({
@@ -516,7 +572,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
       setInputText('');
     }
 
-    // Direct Firestore Database Delivery
     if (isFirebaseConfigured && db) {
       try {
         const convId = [currentUser.uid, targetContactId].sort().join('_');
@@ -537,7 +592,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           reaction: '',
           read: false,
           createdAt: serverTimestamp(),
-          clientTimestamp: Date.now(),
+          clientTimestamp: nowTimestamp,
         });
       } catch (err) {
         console.error('Direct message Firestore save error:', err);
@@ -649,7 +704,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setIsThreadMenuOpen(false);
   };
 
-  // Start new chat with real database registered user
   const handleStartNewChat = async (e?: React.FormEvent, customHandle?: string) => {
     if (e) e.preventDefault();
     const handle = (customHandle || newChatInput).trim().replace(/^@/, '');
@@ -687,7 +741,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     setNewChatInput('');
   };
 
-  // WebRTC Voice Call logic
   const startCall = async (type: 'audio' | 'video' = 'audio') => {
     if (!selectedContact || !currentUser) return;
     setVoiceError(null);
@@ -842,8 +895,23 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex justify-end">
-      <div className="w-full sm:max-w-md h-full bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl flex flex-col animate-drawer-in select-none">
+      <div className="w-full sm:max-w-md h-full bg-zinc-950 text-zinc-100 border-l border-zinc-800/80 shadow-2xl flex flex-col animate-drawer-in select-none relative overflow-hidden">
         
+        {/* Fullscreen Animated Background Emoji Layer */}
+        {screenAnim && (
+          <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center overflow-hidden">
+            <div
+              className={`absolute top-1/2 left-1/2 select-none text-[85px] sm:text-[115px] drop-shadow-2xl ${
+                screenAnim.type === 'sender'
+                  ? 'animate-sender-emoji'
+                  : 'animate-receiver-emoji'
+              }`}
+            >
+              {screenAnim.emoji}
+            </div>
+          </div>
+        )}
+
         {/* INBOX LIST VIEW */}
         {!selectedContact && (
           <div className="flex flex-col h-full">
@@ -902,7 +970,6 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                   </button>
                 </form>
 
-                {/* Suggested registered users strictly from Firestore */}
                 {dbSuggestedUsers.length > 0 && (
                   <div className="pt-1">
                     <p className="text-[10px] text-zinc-400 font-semibold mb-1.5 uppercase tracking-wider">Suggested users:</p>
@@ -1253,9 +1320,18 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                       </div>
                     </div>
 
+                    {/* ടൈംസ്റ്റാമ്പ് & സീൻ സ്റ്റാറ്റസ് (കണ്ടുകഴിഞ്ഞാൽ 👀 ഇമോജി കാണിക്കും) */}
                     <div className="flex items-center gap-1 text-[9px] text-zinc-500 mt-1 px-1">
                       <span>{msg.time}</span>
-                      {msg.isMe && <CheckCheck className="w-3 h-3 text-sky-400 inline" />}
+                      {msg.isMe && (
+                        msg.read ? (
+                          <span className="text-[12px] leading-none inline-block ml-0.5 select-none animate-in zoom-in-75 duration-150" title="Seen">
+                            👀
+                          </span>
+                        ) : (
+                          <Check className="w-3 h-3 text-zinc-500 inline" title="Sent" />
+                        )
+                      )}
                     </div>
                   </div>
                 ))
