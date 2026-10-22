@@ -29,7 +29,9 @@ import {
   Copy,
   Bell,
   BellOff,
-  Maximize2
+  Maximize2,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { AppUser } from '../types';
 import { db, isFirebaseConfigured } from '../firebase';
@@ -37,6 +39,7 @@ import {
   collection, 
   query, 
   orderBy, 
+  where,
   onSnapshot, 
   addDoc, 
   serverTimestamp,
@@ -56,7 +59,8 @@ import { PublicUserProfile } from '../types';
 import { 
   getSuggestedDatabaseUsers, 
   getRegisteredUserById, 
-  searchRegisteredUsers 
+  searchRegisteredUsers,
+  isValidFirebaseUid 
 } from '../utils/userSearch';
 
 interface DirectMessagesModalProps {
@@ -80,12 +84,14 @@ interface Message {
   reaction?: string;
   read?: boolean;
   seenBy?: string[]; // UIDs of users who have viewed this message
+  status?: 'sending' | 'sent' | 'error';
+  errorMessage?: string;
   createdAt?: number;
   clientTimestamp?: number;
 }
 
 interface ChatContact {
-  id: string; // Real Firestore Auth UID
+  id: string; // Real Firestore Auth UID (must satisfy isValidFirebaseUid)
   name: string;
   username: string;
   avatar: string;
@@ -97,7 +103,7 @@ interface ChatContact {
   category?: 'primary' | 'general';
 }
 
-// Purge legacy mock contacts (e.g. u-alex, u-maya, u-kai, u-shoebell) from client local storage
+// Purge legacy mock contacts and synthetic non-UID contacts from local storage
 const sanitizeStoredContacts = (raw: string | null): ChatContact[] => {
   if (!raw) return [];
   try {
@@ -106,7 +112,8 @@ const sanitizeStoredContacts = (raw: string | null): ChatContact[] => {
     return parsed.filter((c: any) => 
       c && 
       typeof c.id === 'string' && 
-      !['u-alex', 'u-maya', 'u-kai', 'u-shoebell'].includes(c.id) &&
+      isValidFirebaseUid(c.id) &&
+      !['u-alex', 'u-maya', 'u-kai', 'u-shoebell', 'shibina', 'sebin_mr'].includes(c.id) &&
       !['alex_creates', 'maya_beats', 'kai_dj', 'shoebell_shoe'].includes((c.username || '').toLowerCase())
     );
   } catch {
@@ -114,7 +121,7 @@ const sanitizeStoredContacts = (raw: string | null): ChatContact[] => {
   }
 };
 
-// Purge legacy mock messages (m1..m7, etc.) from client local storage
+// Purge legacy mock messages and non-UID thread keys from client local storage
 const sanitizeStoredThreads = (raw: string | null): Record<string, Message[]> => {
   if (!raw) return {};
   try {
@@ -122,7 +129,7 @@ const sanitizeStoredThreads = (raw: string | null): Record<string, Message[]> =>
     if (!parsed || typeof parsed !== 'object') return {};
     const sanitized: Record<string, Message[]> = {};
     for (const [key, msgList] of Object.entries(parsed)) {
-      if (['u-alex', 'u-maya', 'u-kai', 'u-shoebell'].includes(key)) continue;
+      if (!isValidFirebaseUid(key)) continue;
       if (!Array.isArray(msgList)) continue;
       const realOnly = msgList.filter((m: any) => 
         m && typeof m.id === 'string' && !['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7'].includes(m.id)
@@ -225,6 +232,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [threadSearchQuery, setThreadSearchQuery] = useState('');
   const [showThreadSearch, setShowThreadSearch] = useState(false);
 
+  // Error and validation state
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [dmsListenerError, setDmsListenerError] = useState<string | null>(null);
+
   // WebRTC Live Voice Chat state
   const [activeCall, setActiveCall] = useState<{
     type: 'audio' | 'video';
@@ -267,7 +278,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (isOpen) {
       getSuggestedDatabaseUsers(currentUser, 8)
         .then((users) => {
-          setDbSuggestedUsers(users);
+          setDbSuggestedUsers(users.filter(u => isValidFirebaseUid(u.uid)));
         })
         .catch((err) => {
           console.debug('Failed to fetch suggested database users:', err);
@@ -276,22 +287,30 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   }, [isOpen, currentUser]);
 
   // Real-Time Direct Messages Listener from Firestore
+  // Scoped strictly to conversations where currentUser.uid is in participants
   useEffect(() => {
-    if (!isFirebaseConfigured || !db || !currentUser) return;
+    if (!isFirebaseConfigured || !db || !currentUser?.uid || !isValidFirebaseUid(currentUser.uid)) {
+      return;
+    }
 
-    const dmsQuery = query(collection(db, 'direct_messages'));
+    const dmsQuery = query(
+      collection(db, 'direct_messages'),
+      where('participants', 'array-contains', currentUser.uid)
+    );
+
     const unsubscribe = onSnapshot(
       dmsQuery,
       (snapshot) => {
+        setDmsListenerError(null);
         const remoteThreads: Record<string, Message[]> = {};
         const contactUpdates = new Map<
           string,
           {
+            peerId: string;
             lastMsg: string;
             time: string;
             timestamp: number;
             unread: boolean;
-            peerUid: string;
             peerName: string;
             peerUsername: string;
             peerAvatar: string;
@@ -305,16 +324,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           const participants: string[] = Array.isArray(data.participants) ? data.participants : [senderId, receiverId];
 
           const isSender = senderId === currentUser.uid;
-          const isReceiver =
-            receiverId === currentUser.uid ||
-            (currentUser.username && receiverId.toLowerCase() === currentUser.username.toLowerCase()) ||
-            (currentUser.username && receiverId.toLowerCase() === `u-${currentUser.username.toLowerCase()}`);
+          const isReceiver = receiverId === currentUser.uid;
           const isParticipant = participants.includes(currentUser.uid) || isSender || isReceiver;
 
           if (!isParticipant) return;
 
+          // The conversation peer ID must always be the other user's real UID
           const peerId = isSender ? receiverId : senderId;
-          if (!peerId || peerId === currentUser.uid) return;
+          if (!isValidFirebaseUid(peerId) || peerId === currentUser.uid) return;
 
           const peerUsername = isSender
             ? data.receiverUsername || 'user'
@@ -348,6 +365,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             reaction: data.reaction || undefined,
             read: data.read === true,
             seenBy,
+            status: 'sent',
             createdAt: timestamp,
             clientTimestamp: typeof data.clientTimestamp === 'number' ? data.clientTimestamp : undefined,
           };
@@ -362,11 +380,11 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           const existingMeta = contactUpdates.get(peerId);
           if (!existingMeta || timestamp > existingMeta.timestamp) {
             contactUpdates.set(peerId, {
+              peerId,
               lastMsg: previewText,
               time: timeStr,
               timestamp,
               unread: isUnread,
-              peerUid: peerId,
               peerName: peerDisplayName,
               peerUsername,
               peerAvatar,
@@ -380,18 +398,23 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           for (const [pid, list] of Object.entries(remoteThreads)) {
             const existingList = merged[pid] || [];
             const msgMap = new Map<string, Message>();
-            // Keep pending optimistic messages that haven't landed in Firestore yet
-            const pendingOptimistic = existingList.filter(
-              (m) =>
-                m.id.startsWith('msg-') &&
-                !list.some(
+
+            // Preserve local sending/error messages that haven't landed on server yet
+            existingList.forEach((m) => {
+              if (m.status === 'sending' || m.status === 'error') {
+                const isConfirmed = list.some(
                   (r) =>
                     (m.clientTimestamp && r.clientTimestamp === m.clientTimestamp) ||
                     (r.text === m.text && r.isMe === m.isMe && Math.abs((r.createdAt || 0) - (m.clientTimestamp || 0)) < 15000)
-                )
-            );
+                );
+                if (!isConfirmed) {
+                  msgMap.set(m.id, m);
+                }
+              }
+            });
+
+            // Authoritative server messages
             list.forEach((m) => msgMap.set(m.id, m));
-            pendingOptimistic.forEach((m) => msgMap.set(m.id, m));
 
             merged[pid] = Array.from(msgMap.values()).sort((a, b) => {
               const timeA = a.createdAt || a.clientTimestamp || 0;
@@ -407,15 +430,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           setContacts((prevContacts) => {
             const updated = [...prevContacts];
             for (const [peerId, meta] of contactUpdates.entries()) {
-              const idx = updated.findIndex(
-                (c) =>
-                  c.id === peerId ||
-                  (meta.peerUsername && c.username.toLowerCase() === meta.peerUsername.toLowerCase())
-              );
+              const idx = updated.findIndex((c) => c.id === peerId);
               if (idx >= 0) {
                 updated[idx] = {
                   ...updated[idx],
-                  id: peerId,
                   name: meta.peerName || updated[idx].name,
                   username: meta.peerUsername || updated[idx].username,
                   avatar: meta.peerAvatar || updated[idx].avatar,
@@ -442,12 +460,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         }
       },
       (error) => {
-        console.error('Real-time direct messages listener error:', error);
+        console.error('[DirectMessage] Scoped onSnapshot listener error:', error);
+        setDmsListenerError(error.message || 'Permission denied or failed to load messages');
       }
     );
 
     return () => unsubscribe();
-  }, [currentUser, selectedContact?.id]);
+  }, [currentUser?.uid, selectedContact?.id]);
 
   // Mark incoming messages as seen when conversation is open
   useEffect(() => {
@@ -497,63 +516,83 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     });
   }, [selectedContact?.id, threads[selectedContact?.id || '']?.length, currentUser?.uid]);
 
+  const setupContactForTarget = (uid: string, name: string, username: string, avatar: string) => {
+    if (!isValidFirebaseUid(uid)) return;
+    if (currentUser?.uid && uid === currentUser.uid) return;
+
+    const existing = contacts.find((c) => c.id === uid || (c.username && c.username.toLowerCase() === username.toLowerCase()));
+    if (existing) {
+      const updatedContact: ChatContact = {
+        ...existing,
+        id: uid,
+        name: name || existing.name,
+        avatar: avatar || existing.avatar,
+      };
+      setContacts((prev) => prev.map((c) => (c.id === uid || c.id === existing.id ? updatedContact : c)));
+      setSelectedContact(updatedContact);
+    } else {
+      const newContact: ChatContact = {
+        id: uid,
+        name: name || username,
+        username: username,
+        avatar: avatar,
+        lastMessage: 'Started new conversation',
+        time: 'Just now',
+        unread: false,
+        online: true,
+        category: 'primary',
+      };
+      setContacts((prev) => [newContact, ...prev.filter((c) => c.id !== uid)]);
+      setSelectedContact(newContact);
+    }
+  };
+
   // Open initial target user or username if requested with real database ID
   useEffect(() => {
     if (!isOpen) return;
 
     if (initialTargetUser) {
-      const targetId = initialTargetUser.uid;
       const cleanHandle = (initialTargetUser.username || '').toLowerCase().replace('@', '');
-      const existing = contacts.find((c) => c.id === targetId || (cleanHandle && c.username.toLowerCase() === cleanHandle));
+      const rawUid = initialTargetUser.uid;
 
-      if (existing) {
-        setSelectedContact({
-          ...existing,
-          id: targetId,
-          name: initialTargetUser.displayName || existing.name,
-          avatar: initialTargetUser.avatar || existing.avatar,
+      if (isValidFirebaseUid(rawUid)) {
+        setupContactForTarget(
+          rawUid,
+          initialTargetUser.displayName || (cleanHandle ? cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1) : 'User'),
+          cleanHandle || rawUid.slice(0, 8),
+          initialTargetUser.avatar || ''
+        );
+      } else if (cleanHandle) {
+        getRegisteredUserById(cleanHandle).then((resolved) => {
+          if (resolved && isValidFirebaseUid(resolved.uid)) {
+            setupContactForTarget(
+              resolved.uid,
+              resolved.displayName || cleanHandle,
+              resolved.username || cleanHandle,
+              resolved.avatar || ''
+            );
+          } else {
+            setValidationError(`Could not resolve registered account for @${cleanHandle}.`);
+          }
         });
-      } else {
-        const newContact: ChatContact = {
-          id: targetId, // Real database ID
-          name: initialTargetUser.displayName || (cleanHandle ? cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1) : 'User'),
-          username: cleanHandle || targetId.slice(0, 8),
-          avatar: initialTargetUser.avatar || '',
-          lastMessage: 'Started new conversation',
-          time: 'Just now',
-          unread: false,
-          online: true,
-          category: 'primary',
-        };
-        setContacts((prev) => [newContact, ...prev]);
-        setSelectedContact(newContact);
       }
       return;
     }
 
     if (initialTargetUsername) {
       const cleanHandle = initialTargetUsername.toLowerCase().replace('@', '');
-      const existing = contacts.find((c) => c.username.toLowerCase() === cleanHandle || c.id === cleanHandle);
-      if (existing) {
-        setSelectedContact(existing);
-      } else {
-        getRegisteredUserById(cleanHandle).then((dbUser) => {
-          const targetId = dbUser?.uid || cleanHandle;
-          const newContact: ChatContact = {
-            id: targetId, // Real database ID
-            name: dbUser?.displayName || cleanHandle.charAt(0).toUpperCase() + cleanHandle.slice(1),
-            username: dbUser?.username || cleanHandle,
-            avatar: dbUser?.avatar || '',
-            lastMessage: 'Started new conversation',
-            time: 'Just now',
-            unread: false,
-            online: true,
-            category: 'primary',
-          };
-          setContacts((prev) => [newContact, ...prev]);
-          setSelectedContact(newContact);
-        });
-      }
+      getRegisteredUserById(cleanHandle).then((resolved) => {
+        if (resolved && isValidFirebaseUid(resolved.uid)) {
+          setupContactForTarget(
+            resolved.uid,
+            resolved.displayName || cleanHandle,
+            resolved.username || cleanHandle,
+            resolved.avatar || ''
+          );
+        } else {
+          setValidationError(`Could not resolve registered account for @${cleanHandle}.`);
+        }
+      });
     }
   }, [initialTargetUsername, initialTargetUser, isOpen]);
 
@@ -654,6 +693,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (activeCall && activeCall.user.id !== contact.id) {
       handleEndCall();
     }
+    setValidationError(null);
     setSelectedContact(contact);
     setShowThreadSearch(false);
     setThreadSearchQuery('');
@@ -662,48 +702,70 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     );
   };
 
-  const handleSendMessage = async (textToSend?: string, attachedImage?: string, voiceDuration?: string) => {
+  const handleSendMessage = async (textToSend?: string, attachedImage?: string, voiceDuration?: string, retryMsg?: Message) => {
     const text = textToSend !== undefined ? textToSend : inputText.trim();
     if (!text && !attachedImage && !voiceDuration) return;
     if (!selectedContact) return;
 
-    const targetContactId = selectedContact.id;
+    setValidationError(null);
+
+    // 1. Recipient UID validation
+    const recipientUid = selectedContact.id;
+    if (!isValidFirebaseUid(recipientUid)) {
+      setValidationError(`Recipient is not a valid registered user (invalid ID: ${recipientUid}). Direct messages require a valid registered account.`);
+      return;
+    }
+
+    // 2. Sender authentication validation
+    if (!currentUser || !isValidFirebaseUid(currentUser.uid)) {
+      setValidationError("You must be logged in with a valid account to send direct messages.");
+      return;
+    }
+
+    if (recipientUid === currentUser.uid) {
+      setValidationError("You cannot send a direct message to yourself.");
+      return;
+    }
+
     const targetUsername = selectedContact.username;
     const now = Date.now();
+    const localMsgId = retryMsg?.id || `msg-${now}-${Math.random().toString(36).slice(2, 7)}`;
+    const conversationId = [currentUser.uid, recipientUid].sort().join('_');
 
-    const localMsgId = `msg-${now}`;
     const newMsg: Message = {
       id: localMsgId,
-      sender: currentUser?.username || 'me',
-      senderId: currentUser?.uid,
-      receiverId: targetContactId,
+      sender: currentUser.username || 'me',
+      senderId: currentUser.uid,
+      receiverId: recipientUid,
       text: text,
       image: attachedImage,
       voiceDuration: voiceDuration,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isMe: true,
       read: false,
-      seenBy: [currentUser?.uid || 'me'],
+      seenBy: [currentUser.uid],
+      status: 'sending',
       clientTimestamp: now,
     };
 
-    console.log('[DirectMessage] Sending direct message:', {
-      senderId: currentUser?.uid,
-      senderUsername: currentUser?.username,
-      receiverId: targetContactId,
-      receiverUsername: targetUsername,
-      textPreview: text ? text.slice(0, 40) : (attachedImage ? '[Photo]' : '[Voice]'),
-      timestamp: now,
+    console.log('[DirectMessage] Sending message:', {
+      senderId: currentUser.uid,
+      receiverId: recipientUid,
+      conversationId,
+      textPreview: text ? text.slice(0, 30) : '[Media]',
     });
 
-    setThreads((prev) => ({
-      ...prev,
-      [targetContactId]: [...(prev[targetContactId] || []), newMsg],
-    }));
+    setThreads((prev) => {
+      const existing = prev[recipientUid] || [];
+      const updated = retryMsg
+        ? existing.map((m) => (m.id === retryMsg.id ? newMsg : m))
+        : [...existing, newMsg];
+      return { ...prev, [recipientUid]: updated };
+    });
 
     setContacts((prev) =>
       prev.map((c) =>
-        c.id === targetContactId
+        c.id === recipientUid
           ? {
               ...c,
               lastMessage: text || (attachedImage ? '📷 Photo' : '🎙️ Voice note'),
@@ -718,17 +780,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
 
     // Live Real-Time Firestore Direct Message Delivery
-    if (isFirebaseConfigured && db && currentUser) {
+    if (isFirebaseConfigured && db) {
       try {
-        const convId = [currentUser.uid, targetContactId].sort().join('_');
         const docRef = await addDoc(collection(db, 'direct_messages'), {
-          conversationId: convId,
-          participants: [currentUser.uid, targetContactId],
+          conversationId,
+          participants: [currentUser.uid, recipientUid],
           senderId: currentUser.uid,
           senderUsername: currentUser.username,
           senderDisplayName: currentUser.displayName || currentUser.username,
           senderAvatar: currentUser.photoURL || '',
-          receiverId: targetContactId,
+          receiverId: recipientUid,
           receiverUsername: targetUsername,
           receiverDisplayName: selectedContact.name,
           receiverAvatar: selectedContact.avatar || '',
@@ -737,13 +798,36 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           voiceDuration: voiceDuration || '',
           reaction: '',
           read: false,
-          seenBy: [currentUser.uid], // sender has seen their message
+          seenBy: [currentUser.uid],
           createdAt: serverTimestamp(),
           clientTimestamp: now,
         });
-        console.log('[DirectMessage] Message successfully written to Firestore. Doc ID:', docRef.id);
-      } catch (err) {
-        console.error('Direct message Firestore save error:', err);
+
+        console.log('[DirectMessage] Message delivered to Firestore with ID:', docRef.id);
+
+        setThreads((prev) => {
+          const list = prev[recipientUid] || [];
+          return {
+            ...prev,
+            [recipientUid]: list.map((m) =>
+              m.id === localMsgId ? { ...m, id: docRef.id, status: 'sent' } : m
+            ),
+          };
+        });
+      } catch (err: any) {
+        console.error('[DirectMessage] Failed to write message to Firestore:', err);
+        setThreads((prev) => {
+          const list = prev[recipientUid] || [];
+          return {
+            ...prev,
+            [recipientUid]: list.map((m) =>
+              m.id === localMsgId
+                ? { ...m, status: 'error', errorMessage: err.message || 'Failed to send' }
+                : m
+            ),
+          };
+        });
+        setValidationError(`Failed to deliver message: ${err.message || 'Permission denied or network failure'}`);
       }
     }
   };
@@ -865,31 +949,25 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     const handle = (customHandle || newChatInput).trim().replace(/^@/, '');
     if (!handle) return;
 
-    const existing = contacts.find((c) => c.username.toLowerCase() === handle.toLowerCase() || c.id === handle);
-    if (existing) {
-      handleSelectContact(existing);
-      setIsComposing(false);
-      setNewChatInput('');
+    setValidationError(null);
+
+    const dbUser = await getRegisteredUserById(handle);
+    if (!dbUser || !isValidFirebaseUid(dbUser.uid)) {
+      setValidationError(`User "@${handle}" is not registered on Noise. Direct messages require a valid registered user.`);
       return;
     }
 
-    const dbUser = await getRegisteredUserById(handle);
-    const targetId = dbUser?.uid || handle;
+    if (currentUser?.uid && dbUser.uid === currentUser.uid) {
+      setValidationError("You cannot direct message yourself.");
+      return;
+    }
 
-    const newContact: ChatContact = {
-      id: targetId, // Real database primary key ID
-      name: dbUser?.displayName || handle.charAt(0).toUpperCase() + handle.slice(1),
-      username: dbUser?.username || handle.toLowerCase(),
-      avatar: dbUser?.avatar || '',
-      lastMessage: 'Started new conversation',
-      time: 'Just now',
-      unread: false,
-      online: true,
-      category: 'primary',
-    };
-
-    setContacts((prev) => [newContact, ...prev]);
-    setSelectedContact(newContact);
+    setupContactForTarget(
+      dbUser.uid,
+      dbUser.displayName || dbUser.username,
+      dbUser.username,
+      dbUser.avatar || ''
+    );
     setIsComposing(false);
     setNewChatInput('');
   };
@@ -1390,6 +1468,27 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </button>
             </div>
 
+            {/* Validation or Sync Error Banner */}
+            {(validationError || dmsListenerError) && (
+              <div className="bg-rose-500/15 border-b border-rose-500/30 px-3.5 py-2 flex items-center justify-between text-xs text-rose-300">
+                <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 flex-none" />
+                  <span className="truncate">{validationError || dmsListenerError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValidationError(null);
+                    setDmsListenerError(null);
+                  }}
+                  className="p-1 hover:text-white transition-colors cursor-pointer"
+                  title="Dismiss error"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Messages Scroll Area */}
             <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-zinc-950">
               {/* User Profile Info Card in Chat */}
@@ -1521,11 +1620,31 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     <span>{msg.time}</span>
                     {msg.isMe && (
                       (() => {
+                        if (msg.status === 'sending') {
+                          return (
+                            <span className="inline-flex items-center gap-1 text-zinc-400 font-medium" title="Delivering to Firestore...">
+                              <Loader2 className="w-3 h-3 animate-spin text-zinc-400 inline" />
+                              <span>Sending...</span>
+                            </span>
+                          );
+                        }
+                        if (msg.status === 'error') {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleSendMessage(msg.text, msg.image, msg.voiceDuration, msg)}
+                              className="inline-flex items-center gap-1 text-rose-400 hover:text-rose-300 font-semibold cursor-pointer transition-colors"
+                              title={msg.errorMessage || 'Delivery failed. Click to retry.'}
+                            >
+                              <RefreshCw className="w-3 h-3 text-rose-400 inline" />
+                              <span>Failed • Retry</span>
+                            </button>
+                          );
+                        }
                         const recipientId = msg.receiverId || selectedContact?.id || '';
                         const isSeenByRecipient = Boolean(
                           (recipientId && Array.isArray(msg.seenBy) && msg.seenBy.includes(recipientId)) ||
                           (selectedContact?.id && Array.isArray(msg.seenBy) && msg.seenBy.includes(selectedContact.id)) ||
-                          (selectedContact?.username && Array.isArray(msg.seenBy) && msg.seenBy.includes(selectedContact.username)) ||
                           msg.read === true
                         );
                         if (isSeenByRecipient) {
@@ -1542,7 +1661,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                         return (
                           <span 
                             className="inline-flex items-center gap-1 text-zinc-400" 
-                            title="Sent, not yet seen"
+                            title="Sent to recipient"
                           >
                             <span>Sent</span>
                             <Check className="w-3 h-3 text-zinc-400 inline stroke-[2]" />

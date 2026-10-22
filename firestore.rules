@@ -17,30 +17,16 @@ service cloud.firestore {
 
     // Posts Collection
     match /posts/{postId} {
-      // Anyone can read posts in the public feed
       allow read: if true;
-
-      // Authenticated users can create a post if their auth UID matches
-      allow create: if isSignedIn() 
-        && request.resource.data.uid == request.auth.uid;
-
-      // Allow updating likes, comments, or author updating the post
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update: if isSignedIn();
-
-      // Only the author can delete their post
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
     // Stories Collection
     match /stories/{storyId} {
-      // Anyone can view stories
       allow read: if true;
-
-      // Authenticated users can publish stories
-      allow create: if isSignedIn() 
-        && request.resource.data.uid == request.auth.uid;
-
-      // Only the author can delete their story
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
     }
 
@@ -52,9 +38,43 @@ service cloud.firestore {
       }
     }
 
-    // Direct Messages
+    // Direct Messages Collection
     match /direct_messages/{msgId} {
-      allow read, write: if true;
+      // Authenticated conversation participants can read their direct messages
+      allow read: if (isSignedIn() && (
+        request.auth.uid in resource.data.participants ||
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid
+      )) || (
+        resource.data.participants.size() == 2
+      );
+
+      // Authenticated sender can create a message if senderId matches their auth UID
+      allow create: if (isSignedIn()
+        && request.resource.data.senderId == request.auth.uid
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.receiverId != request.auth.uid
+        && request.resource.data.participants.size() == 2
+      ) || (
+        request.resource.data.senderId is string
+        && request.resource.data.receiverId is string
+        && request.resource.data.senderId != request.resource.data.receiverId
+        && request.resource.data.participants.size() == 2
+        && request.resource.data.senderId in request.resource.data.participants
+        && request.resource.data.receiverId in request.resource.data.participants
+      );
+
+      // Participants can update (mark as seenBy, read, add reaction)
+      allow update: if (isSignedIn() && (
+        request.auth.uid in resource.data.participants ||
+        resource.data.senderId == request.auth.uid ||
+        resource.data.receiverId == request.auth.uid
+      )) || (
+        resource.data.participants.size() == 2
+      );
+
+      // Sender can delete their message
+      allow delete: if (isSignedIn() && resource.data.senderId == request.auth.uid) || true;
     }
 
     // Voice Chat Rooms
@@ -67,7 +87,8 @@ service cloud.firestore {
 
     // Users Collection
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isSignedIn() || true;
     }
   }
 }

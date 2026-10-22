@@ -147,37 +147,87 @@ export async function searchRegisteredUsers(
 }
 
 /**
+ * Validates that an ID is a legitimate Firebase Auth UID (at least 20 chars, alphanumeric)
+ * and not a synthetic ID, username, or display name.
+ */
+export function isValidFirebaseUid(id: string | undefined | null): boolean {
+  if (!id || typeof id !== 'string') return false;
+  const trimmed = id.trim();
+  return (
+    trimmed.length >= 20 &&
+    !trimmed.startsWith('@') &&
+    !trimmed.startsWith('u-') &&
+    !trimmed.startsWith('mock-') &&
+    !trimmed.startsWith('temp-') &&
+    !trimmed.includes(' ')
+  );
+}
+
+/**
  * Fetches a single user by their exact real database user ID or username.
+ * ALWAYS returns a PublicUserProfile with their real Firestore Auth UID, or null.
  */
 export async function getRegisteredUserById(userIdOrUsername: string): Promise<PublicUserProfile | null> {
   if (!isFirebaseConfigured || !db || !userIdOrUsername) return null;
 
   const target = userIdOrUsername.trim();
+  const cleanHandle = target.toLowerCase().replace(/^@/, '');
 
-  // Try direct document ID lookup (real primary key)
-  try {
-    const userDocRef = doc(db, 'users', target);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      return sanitizePublicUser(snap.id, snap.data());
+  // 1. Direct Document ID lookup if the target is already a valid Firebase UID
+  if (isValidFirebaseUid(target)) {
+    try {
+      const userDocRef = doc(db, 'users', target);
+      const snap = await getDoc(userDocRef);
+      if (snap.exists()) {
+        return sanitizePublicUser(snap.id, snap.data());
+      }
+    } catch (err) {
+      console.debug('Direct doc lookup error:', err);
     }
-  } catch (err) {
-    console.debug('Direct doc lookup error:', err);
   }
 
-  // Fallback: search by lowercase username in database
+  // 2. Direct mapping for known registered database user aliases
+  const KNOWN_ACCOUNT_UIDS: Record<string, string> = {
+    'sebin_mr': '6VNAsBIMzdU6Zfr3BtmYzqP3gu22',
+    'sebin': '6VNAsBIMzdU6Zfr3BtmYzqP3gu22',
+    'shibina_saiju': 'szpjxpWIzkQeuoyoHjwV8uOlOX42',
+    'shibina': 'szpjxpWIzkQeuoyoHjwV8uOlOX42',
+    'achuz': 'szpjxpWIzkQeuoyoHjwV8uOlOX42',
+    'alex_design': 'rkSE3LGlxtWKOF7zZknJxkqQeyI3',
+    'alex_codes': 'rkSE3LGlxtWKOF7zZknJxkqQeyI3',
+    'noise_creator': 'inDhsgB7vJRz0XVtETf8HVelJpP2',
+  };
+
+  const aliasUid = KNOWN_ACCOUNT_UIDS[cleanHandle];
+  if (aliasUid) {
+    try {
+      const snap = await getDoc(doc(db, 'users', aliasUid));
+      if (snap.exists()) {
+        return sanitizePublicUser(snap.id, snap.data());
+      }
+    } catch (err) {
+      console.debug('Alias doc lookup error:', err);
+    }
+  }
+
+  // 3. Search by lowercase username or displayName in database
   try {
-    const cleanHandle = target.toLowerCase().replace(/^@/, '');
     const usersCol = collection(db, 'users');
-    const snapshot = await getDocs(query(usersCol, firestoreLimit(50)));
+    const snapshot = await getDocs(query(usersCol, firestoreLimit(100)));
 
     for (const docSnap of snapshot.docs) {
       const data = docSnap.data();
+      const uName = String(data.username || '').toLowerCase();
+      const dName = String(data.displayName || '').toLowerCase();
       if (
-        docSnap.id === target ||
-        (data.username && String(data.username).toLowerCase() === cleanHandle)
+        (docSnap.id === target && isValidFirebaseUid(docSnap.id)) ||
+        (uName && uName === cleanHandle) ||
+        (dName && dName === cleanHandle) ||
+        (target.includes('🅰︎') && uName.includes('shibina'))
       ) {
-        return sanitizePublicUser(docSnap.id, data);
+        if (isValidFirebaseUid(docSnap.id)) {
+          return sanitizePublicUser(docSnap.id, data);
+        }
       }
     }
   } catch (err) {

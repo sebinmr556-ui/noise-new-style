@@ -151,7 +151,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                 type="button"
                 onClick={() => {
                   const userB: AppUser = {
-                    uid: 'inDhsgB7vJRz0XVtETf8HVelJpP2',
+                    uid: 'szpjxpWIzkQeuoyoHjwV8uOlOX42',
                     username: 'shibina_saiju',
                     displayName: 'Shibina Saiju',
                     photoURL: '',
