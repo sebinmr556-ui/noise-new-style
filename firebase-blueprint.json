@@ -55,6 +55,32 @@
         "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp" }
       },
       "required": ["uid", "username", "mediaUrl"]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Peer-to-peer direct message with text, attachments, reactions, and seenBy status array.",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string", "description": "Deterministic conversation key between participants" },
+        "participants": { "type": "array", "description": "Array of participant user IDs" },
+        "senderId": { "type": "string", "description": "UID of the message sender" },
+        "senderUsername": { "type": "string", "description": "Username of sender" },
+        "senderDisplayName": { "type": "string", "description": "Display name of sender" },
+        "senderAvatar": { "type": "string", "description": "Avatar of sender" },
+        "receiverId": { "type": "string", "description": "UID of the message recipient" },
+        "receiverUsername": { "type": "string", "description": "Username of recipient" },
+        "receiverDisplayName": { "type": "string", "description": "Display name of recipient" },
+        "receiverAvatar": { "type": "string", "description": "Avatar of recipient" },
+        "text": { "type": "string", "description": "Message content" },
+        "image": { "type": "string", "description": "Optional image URL/data URL" },
+        "voiceDuration": { "type": "string", "description": "Optional voice recording duration" },
+        "reaction": { "type": "string", "description": "Optional reaction emoji" },
+        "read": { "type": "boolean", "description": "Read status flag" },
+        "seenBy": { "type": "array", "description": "List of user UIDs who opened/saw the message" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Firestore server timestamp" },
+        "clientTimestamp": { "type": "number", "description": "Client millisecond timestamp" }
+      },
+      "required": ["participants", "senderId", "receiverId"]
     }
   },
   "firestore": {
@@ -69,6 +95,10 @@
     "/stories/{storyId}": {
       "schema": "Story",
       "description": "Stories tray collection"
+    },
+    "/direct_messages/{msgId}": {
+      "schema": "DirectMessage",
+      "description": "Direct message thread entries with seenBy indicator array"
     }
   }
 }

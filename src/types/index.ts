@@ -164,3 +164,32 @@ export interface VoiceRoom {
   pkBattle?: PKBattle;
   activeGame?: InteractiveGame;
 }
+
+export interface DirectMessageItem {
+  id: string;
+  sender: string;
+  senderId?: string;
+  receiverId?: string;
+  text: string;
+  image?: string;
+  voiceDuration?: string;
+  time: string;
+  isMe: boolean;
+  reaction?: string;
+  read?: boolean;
+  seenBy?: string[]; // Array of user UIDs who opened/saw the message
+  createdAt?: number;
+}
+
+export interface DirectMessageContact {
+  id: string; // Real database UID
+  name: string;
+  username: string;
+  avatar: string;
+  lastMessage: string;
+  time: string;
+  unread: boolean;
+  unreadCount?: number;
+  online: boolean;
+  category?: 'primary' | 'general';
+}

@@ -102,16 +102,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [localVolume, setLocalVolume] = useState(0);
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
   const [chatInput, setChatInput] = useState('');
-  const [messages, setMessages] = useState<RoomMessage[]>([
-    {
-      id: 'm-welcome',
-      uid: 'system',
-      username: 'Room Bot',
-      avatar: 'https://ui-avatars.com/api/?name=Noise+Bot&background=6366f1&color=fff',
-      text: `Welcome to "${room.title}"! Tap any slot heart to send love ❤️`,
-      createdAt: Date.now() - 30000,
-    }
-  ]);
+  const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -138,18 +129,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         });
 
         loaded.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-
-        setMessages([
-          {
-            id: 'm-welcome',
-            uid: 'system',
-            username: 'Room Bot',
-            avatar: 'https://ui-avatars.com/api/?name=Noise+Bot&background=6366f1&color=fff',
-            text: `Welcome to "${room.title}"! Tap any slot heart to send love ❤️`,
-            createdAt: 0,
-          },
-          ...loaded,
-        ]);
+        setMessages(loaded);
       },
       (err) => {
         console.debug('Voice room messages listener error:', err);
