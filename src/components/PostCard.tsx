@@ -249,7 +249,7 @@ export const PostCard: React.FC<PostCardProps> = ({
         <div className="flex items-center gap-2.5">
           <div 
             onClick={() => onSelectUser?.(post.username, post.uid, post.avatar)}
-            className="w-8 h-8 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
+            className="w-8 h-8 rounded-full p-[1.5px] noise-story-gradient flex items-center justify-center cursor-pointer hover:opacity-90 transition-opacity"
             title={`View @${post.username}'s profile`}
           >
             {post.avatar && !post.avatar.includes('unsplash.com') && !post.avatar.includes('ui-avatars.com') ? (

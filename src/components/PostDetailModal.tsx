@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, ArrowLeft } from 'lucide-react';
 import { Post, AppUser } from '../types';
 import { PostCard } from './PostCard';
 
@@ -35,8 +35,18 @@ export const PostDetailModal: React.FC<PostDetailModalProps> = ({
       <div className="relative w-full max-w-[440px] bg-zinc-950 border border-zinc-800 text-zinc-100 rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 max-h-[95vh] overflow-y-auto no-scrollbar">
         <button
           onClick={onClose}
+          className="absolute top-3 left-3 z-20 p-1.5 bg-black/80 text-white rounded-full hover:bg-black transition-colors ring-1 ring-zinc-700"
+          type="button"
+          title="Back"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+
+        <button
+          onClick={onClose}
           className="absolute top-3 right-3 z-20 p-1.5 bg-black/80 text-white rounded-full hover:bg-black transition-colors ring-1 ring-zinc-700"
           type="button"
+          title="Close"
         >
           <X className="w-5 h-5" />
         </button>

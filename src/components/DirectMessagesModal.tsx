@@ -40,6 +40,7 @@ import {
   query, 
   orderBy, 
   where,
+  getDocs,
   onSnapshot, 
   addDoc, 
   serverTimestamp,
@@ -62,10 +63,12 @@ import {
   searchRegisteredUsers,
   isValidFirebaseUid 
 } from '../utils/userSearch';
+import { diagnoseDMSession } from '../utils/dmDiagnostic';
 
 interface DirectMessagesModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onBack?: () => void;
   currentUser: AppUser | null;
   initialTargetUsername?: string | null;
   initialTargetUser?: PublicUserProfile | { uid: string; username: string; displayName?: string; avatar?: string } | null;
@@ -193,6 +196,7 @@ const ContactAvatar: React.FC<{ contact: ChatContact; className?: string; size?:
 export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   isOpen,
   onClose,
+  onBack,
   currentUser,
   initialTargetUsername,
   initialTargetUser,
@@ -286,23 +290,23 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     }
   }, [isOpen, currentUser]);
 
-  // Real-Time Direct Messages Listener from Firestore
-  // Scoped strictly to conversations where currentUser.uid is in participants
+  // Initial discovery of past conversations to populate sidebar contacts using getDocs
   useEffect(() => {
-    if (!isFirebaseConfigured || !db || !currentUser?.uid || !isValidFirebaseUid(currentUser.uid)) {
-      return;
-    }
+    if (!isOpen || !isFirebaseConfigured || !db) return;
+    const firestoreDb = db;
+    const senderUid = auth?.currentUser?.uid || currentUser?.uid;
+    if (!senderUid || !isValidFirebaseUid(senderUid)) return;
 
-    const dmsQuery = query(
-      collection(db, 'direct_messages'),
-      where('participants', 'array-contains', currentUser.uid)
-    );
+    let isMounted = true;
+    const fetchRecentConversations = async () => {
+      try {
+        const dmsQuery = query(
+          collection(firestoreDb, 'direct_messages'),
+          where('participants', 'array-contains', senderUid)
+        );
+        const snapshot = await getDocs(dmsQuery);
+        if (!isMounted) return;
 
-    const unsubscribe = onSnapshot(
-      dmsQuery,
-      (snapshot) => {
-        setDmsListenerError(null);
-        const remoteThreads: Record<string, Message[]> = {};
         const contactUpdates = new Map<
           string,
           {
@@ -319,19 +323,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          const senderId = String(data.senderId || '');
-          const receiverId = String(data.receiverId || '');
-          const participants: string[] = Array.isArray(data.participants) ? data.participants : [senderId, receiverId];
+          const sId = String(data.senderId || '');
+          const rId = String(data.receiverId || '');
+          const participants: string[] = Array.isArray(data.participants) ? data.participants : [sId, rId];
 
-          const isSender = senderId === currentUser.uid;
-          const isReceiver = receiverId === currentUser.uid;
-          const isParticipant = participants.includes(currentUser.uid) || isSender || isReceiver;
+          const isSender = sId === senderUid;
+          const isReceiver = rId === senderUid;
+          if (!participants.includes(senderUid) && !isSender && !isReceiver) return;
 
-          if (!isParticipant) return;
-
-          // The conversation peer ID must always be the other user's real UID
-          const peerId = isSender ? receiverId : senderId;
-          if (!isValidFirebaseUid(peerId) || peerId === currentUser.uid) return;
+          const peerId = isSender ? rId : sId;
+          if (!isValidFirebaseUid(peerId) || peerId === senderUid) return;
 
           const peerUsername = isSender
             ? data.receiverUsername || 'user'
@@ -350,31 +351,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
           const seenBy: string[] = Array.isArray(data.seenBy)
             ? data.seenBy
-            : (data.read ? [receiverId, senderId] : [senderId]);
-
-          const msg: Message = {
-            id: docSnap.id,
-            sender: data.senderUsername || (isSender ? currentUser.username : peerUsername),
-            senderId,
-            receiverId,
-            text: data.text || '',
-            image: data.image || undefined,
-            voiceDuration: data.voiceDuration || undefined,
-            time: timeStr,
-            isMe: isSender,
-            reaction: data.reaction || undefined,
-            read: data.read === true,
-            seenBy,
-            status: 'sent',
-            createdAt: timestamp,
-            clientTimestamp: typeof data.clientTimestamp === 'number' ? data.clientTimestamp : undefined,
-          };
-
-          if (!remoteThreads[peerId]) remoteThreads[peerId] = [];
-          remoteThreads[peerId].push(msg);
+            : (data.read ? [rId, sId] : [sId]);
 
           const previewText = data.text || (data.image ? '📷 Photo' : '🎙️ Voice note');
-          const isSeenByMe = seenBy.includes(currentUser.uid);
+          const isSeenByMe = seenBy.includes(senderUid);
           const isUnread = !isSender && !isSeenByMe && data.read !== true && selectedContact?.id !== peerId;
 
           const existingMeta = contactUpdates.get(peerId);
@@ -392,41 +372,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           }
         });
 
-        // Merge messages into threads state without duplicates
-        setThreads((prev) => {
-          const merged = { ...prev };
-          for (const [pid, list] of Object.entries(remoteThreads)) {
-            const existingList = merged[pid] || [];
-            const msgMap = new Map<string, Message>();
-
-            // Preserve local sending/error messages that haven't landed on server yet
-            existingList.forEach((m) => {
-              if (m.status === 'sending' || m.status === 'error') {
-                const isConfirmed = list.some(
-                  (r) =>
-                    (m.clientTimestamp && r.clientTimestamp === m.clientTimestamp) ||
-                    (r.text === m.text && r.isMe === m.isMe && Math.abs((r.createdAt || 0) - (m.clientTimestamp || 0)) < 15000)
-                );
-                if (!isConfirmed) {
-                  msgMap.set(m.id, m);
-                }
-              }
-            });
-
-            // Authoritative server messages
-            list.forEach((m) => msgMap.set(m.id, m));
-
-            merged[pid] = Array.from(msgMap.values()).sort((a, b) => {
-              const timeA = a.createdAt || a.clientTimestamp || 0;
-              const timeB = b.createdAt || b.clientTimestamp || 0;
-              return timeA - timeB;
-            });
-          }
-          return merged;
-        });
-
-        // Update contacts with real incoming conversation partners
-        if (contactUpdates.size > 0) {
+        if (contactUpdates.size > 0 && isMounted) {
           setContacts((prevContacts) => {
             const updated = [...prevContacts];
             for (const [peerId, meta] of contactUpdates.entries()) {
@@ -458,15 +404,16 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             return updated;
           });
         }
-      },
-      (error) => {
-        console.error('[DirectMessage] Scoped onSnapshot listener error:', error);
-        setDmsListenerError(error.message || 'Permission denied or failed to load messages');
+      } catch (err: any) {
+        console.debug('Failed to fetch past conversations:', err);
       }
-    );
+    };
 
-    return () => unsubscribe();
-  }, [currentUser?.uid, selectedContact?.id]);
+    fetchRecentConversations();
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, currentUser?.uid]);
 
   // Dedicated robust onSnapshot listener subscribing strictly to conversationId
   // generated by joining sorted user UIDs: [senderUid, targetUid].sort().join('_')
@@ -484,6 +431,9 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
 
     const conversationId = [senderUid, targetUid].sort().join('_');
 
+    // Diagnostic validation on DM session open
+    diagnoseDMSession(senderUid, targetUid, [], `DM Session with @${selectedContact.username}`);
+
     console.log('[DirectMessage] Subscribing dedicated onSnapshot to conversationId:', conversationId);
 
     const convQuery = query(
@@ -497,6 +447,10 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         setDmsListenerError(null);
         const incomingList: Message[] = [];
         const unreadDocIds: string[] = [];
+
+        // Diagnostic validation of all Firestore documents in conversation
+        const rawDocs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+        diagnoseDMSession(senderUid, targetUid, rawDocs, `DM Conversation [${conversationId}]`);
 
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
@@ -585,6 +539,24 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             [targetUid]: sorted,
           };
         });
+
+        // Update selected contact in sidebar with authoritative last message
+        if (incomingList.length > 0) {
+          const lastMsg = incomingList[incomingList.length - 1];
+          const preview = lastMsg.text || (lastMsg.image ? '📷 Photo' : '🎙️ Voice note');
+          setContacts((prev) =>
+            prev.map((c) =>
+              c.id === targetUid
+                ? {
+                    ...c,
+                    lastMessage: preview,
+                    time: lastMsg.time,
+                    unread: false,
+                  }
+                : c
+            )
+          );
+        }
       },
       (error) => {
         console.error('[DirectMessage] Error in conversationId onSnapshot:', error);
@@ -1266,6 +1238,14 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             {/* Header */}
             <div className="px-4 py-3.5 border-b border-zinc-800/80 flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <button
+                  onClick={onClose}
+                  className="p-1.5 -ml-1 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors"
+                  type="button"
+                  title="Back"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
                 <span className="font-brand text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-rose-500 via-purple-500 to-indigo-500">
                   Noise Direct
                 </span>
@@ -1456,7 +1436,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
             <div className="px-3 py-2.5 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md relative">
               <div className="flex items-center gap-2.5 min-w-0">
                 <button
-                  onClick={() => setSelectedContact(null)}
+                  onClick={() => {
+                    if (onBack) {
+                      onBack();
+                    } else {
+                      setSelectedContact(null);
+                    }
+                  }}
                   className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors"
                   type="button"
                   title="Back to Inbox"
@@ -1635,7 +1621,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     </span>
                   )}
                 </h3>
-                <p className="text-xs text-zinc-400 mt-0.5">@{selectedContact.username} • Instagram Direct</p>
+                <p className="text-xs text-zinc-400 mt-0.5">@{selectedContact.username} • Noise Direct</p>
                 <p className="text-[10px] text-zinc-500 mt-1">End-to-end encrypted messaging</p>
               </div>
 

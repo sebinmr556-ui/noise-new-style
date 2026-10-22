@@ -163,7 +163,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
           <div className="relative flex-none">
             <div
               onClick={handleAvatarClick}
-              className="w-20 h-20 rounded-full p-[2px] ig-story-gradient cursor-pointer group"
+              className="w-20 h-20 rounded-full p-[2px] noise-story-gradient cursor-pointer group"
               title={hasPhoto ? "Manage profile photo" : "Upload profile photo"}
             >
               <div className="w-full h-full rounded-full bg-zinc-950 p-[2px] overflow-hidden flex items-center justify-center">
@@ -612,7 +612,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({
                       className="p-2.5 rounded-2xl bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-800/70 flex items-center justify-between gap-3 cursor-pointer group transition-all"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-10 h-10 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center flex-none">
+                        <div className="w-10 h-10 rounded-full p-[1.5px] noise-story-gradient flex items-center justify-center flex-none">
                           <img
                             src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=3a1af2&color=fff`}
                             alt={user.displayName}

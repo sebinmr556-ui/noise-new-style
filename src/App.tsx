@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   auth, 
   db, 
@@ -18,6 +18,12 @@ import {
   onSnapshot
 } from './firebase';
 import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant, PublicUserProfile } from './types';
+import { 
+  AppNavState, 
+  parseUrlToNavState, 
+  navStateToUrl, 
+  areNavStatesEqual 
+} from './utils/navigation';
 import { UserProfileModal } from './components/UserProfileModal';
 import { syncUserToDatabase, getRegisteredUserById, toggleFollowInDatabase } from './utils/userSearch';
 import { StoriesBar } from './components/StoriesBar';
@@ -52,8 +58,13 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 export default function App() {
+  const initialNav = useRef<AppNavState>(parseUrlToNavState()).current;
+
   const [activeTab, setActiveTab] = useState<NavTab>(() => {
     try {
+      if (initialNav.tab && ['home', 'search', 'upload', 'reels', 'profile'].includes(initialNav.tab)) {
+        return initialNav.tab;
+      }
       const savedTab = sessionStorage.getItem('noise_active_tab') as NavTab | null;
       if (savedTab && ['home', 'search', 'upload', 'reels', 'profile'].includes(savedTab)) {
         return savedTab;
@@ -97,15 +108,15 @@ export default function App() {
   });
 
   const [stories, setStories] = useState<Story[]>([]);
-  const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(initialNav.storyIndex !== undefined ? initialNav.storyIndex : null);
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null);
   const [selectedDetailPost, setSelectedDetailPost] = useState<Post | null>(null);
 
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [isDirectModalOpen, setIsDirectModalOpen] = useState(false);
-  const [directTargetUsername, setDirectTargetUsername] = useState<string | null>(null);
+  const [isDirectModalOpen, setIsDirectModalOpen] = useState(!!initialNav.isDirectOpen);
+  const [directTargetUsername, setDirectTargetUsername] = useState<string | null>(initialNav.directContactUsername || null);
   const [directTargetUser, setDirectTargetUser] = useState<PublicUserProfile | null>(null);
-  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(!!initialNav.isNotificationsOpen);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [isTopLoading, setIsTopLoading] = useState(false);
   const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
@@ -206,8 +217,238 @@ export default function App() {
   const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(DEFAULT_ROOMS);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
-  const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(false);
-  const [isVoiceRoomsListOpen, setIsVoiceRoomsListOpen] = useState(false);
+  const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(!!initialNav.isCreateVoiceRoomOpen);
+  const [isVoiceRoomsListOpen, setIsVoiceRoomsListOpen] = useState(!!initialNav.isVoiceRoomsListOpen);
+
+  const navStateRef = useRef<AppNavState>(initialNav);
+  const isPoppingRef = useRef(false);
+  const stepCountRef = useRef(0);
+
+  const pushNav = (updates: Partial<AppNavState>, replace: boolean = false) => {
+    if (isPoppingRef.current) return;
+    const current = navStateRef.current;
+    const next: AppNavState = {
+      ...current,
+      ...updates,
+      stepIndex: replace ? current.stepIndex : current.stepIndex + 1,
+    };
+    if (!replace && areNavStatesEqual(current, next)) {
+      return;
+    }
+    navStateRef.current = next;
+    const url = navStateToUrl(next);
+    if (replace) {
+      window.history.replaceState(next, '', url);
+    } else {
+      window.history.pushState(next, '', url);
+      stepCountRef.current++;
+    }
+  };
+
+  const hasAnyModalOpen = () => {
+    return (
+      selectedDetailPost !== null ||
+      selectedUserProfile !== null ||
+      isDirectModalOpen ||
+      isNotificationsOpen ||
+      activeStoryIndex !== null ||
+      activeCommentPost !== null ||
+      isVoiceRoomsListOpen ||
+      isCreateVoiceRoomOpen ||
+      isVoiceRoomModalOpen ||
+      isMenuOpen ||
+      isCoinModalOpen ||
+      isLoginModalOpen
+    );
+  };
+
+  const handleBack = () => {
+    if (stepCountRef.current > 0 || (window.history.state && typeof window.history.state.stepIndex === 'number' && window.history.state.stepIndex > 0)) {
+      window.history.back();
+    } else {
+      // Step-by-step fallback for direct URLs or refreshes
+      if (isCoinModalOpen) {
+        setIsCoinModalOpen(false);
+        pushNav({ isCoinModalOpen: false }, true);
+      } else if (isMenuOpen) {
+        setIsMenuOpen(false);
+        pushNav({ isMenuOpen: false }, true);
+      } else if (isLoginModalOpen) {
+        setIsLoginModalOpen(false);
+        pushNav({ isLoginModalOpen: false }, true);
+      } else if (activeCommentPost) {
+        setActiveCommentPost(null);
+        pushNav({ activeCommentPostId: null }, true);
+      } else if (selectedDetailPost) {
+        setSelectedDetailPost(null);
+        pushNav({ detailPostId: null }, true);
+      } else if (selectedUserProfile) {
+        setSelectedUserProfile(null);
+        pushNav({ userProfileUsername: null, userProfileUid: null }, true);
+      } else if (isDirectModalOpen) {
+        setIsDirectModalOpen(false);
+        setDirectTargetUsername(null);
+        setDirectTargetUser(null);
+        pushNav({ isDirectOpen: false, directContactId: null, directContactUsername: null }, true);
+      } else if (isNotificationsOpen) {
+        setIsNotificationsOpen(false);
+        pushNav({ isNotificationsOpen: false }, true);
+      } else if (activeStoryIndex !== null) {
+        setActiveStoryIndex(null);
+        pushNav({ storyIndex: null }, true);
+      } else if (isVoiceRoomModalOpen) {
+        setIsVoiceRoomModalOpen(false);
+        pushNav({ voiceRoomId: null }, true);
+      } else if (isVoiceRoomsListOpen) {
+        setIsVoiceRoomsListOpen(false);
+        pushNav({ isVoiceRoomsListOpen: false }, true);
+      } else if (isCreateVoiceRoomOpen) {
+        setIsCreateVoiceRoomOpen(false);
+        pushNav({ isCreateVoiceRoomOpen: false }, true);
+      } else if (activeTab !== 'home') {
+        handleTabChange('home');
+      }
+    }
+  };
+
+  const handleOpenDetailPost = (post: Post) => {
+    setSelectedDetailPost(post);
+    pushNav({ detailPostId: post.id });
+  };
+
+  const handleOpenComments = (post: Post) => {
+    setActiveCommentPost(post);
+    pushNav({ activeCommentPostId: post.id });
+  };
+
+  const handleOpenStory = (index: number) => {
+    setActiveStoryIndex(index);
+    pushNav({ storyIndex: index });
+  };
+
+  const handleOpenVoiceRoomsList = () => {
+    setIsVoiceRoomsListOpen(true);
+    pushNav({ isVoiceRoomsListOpen: true });
+  };
+
+  const handleOpenCreateVoiceRoom = () => {
+    if (!currentUser) {
+      setIsLoginModalOpen(true);
+      pushNav({ isLoginModalOpen: true });
+      return;
+    }
+    setIsCreateVoiceRoomOpen(true);
+    pushNav({ isCreateVoiceRoomOpen: true });
+  };
+
+  const handleOpenCoinModal = () => {
+    setIsCoinModalOpen(true);
+    pushNav({ isCoinModalOpen: true });
+  };
+
+  const handleOpenMenu = () => {
+    setIsMenuOpen(true);
+    pushNav({ isMenuOpen: true });
+  };
+
+  const handleOpenNotifications = () => {
+    setIsNotificationsOpen(true);
+    pushNav({ isNotificationsOpen: true });
+  };
+
+  useEffect(() => {
+    const currentInit = parseUrlToNavState(activeTab);
+    window.history.replaceState(currentInit, '', navStateToUrl(currentInit));
+
+    const onPopState = (e: PopStateEvent) => {
+      isPoppingRef.current = true;
+      const state: AppNavState = e.state || parseUrlToNavState(activeTab);
+      navStateRef.current = state;
+
+      // 1. Restore tab without redirecting to home
+      if (state.tab && ['home', 'search', 'upload', 'reels', 'profile'].includes(state.tab)) {
+        setActiveTab(state.tab);
+        try {
+          sessionStorage.setItem('noise_active_tab', state.tab);
+        } catch {}
+      }
+
+      // 2. Restore Post Detail
+      if (state.detailPostId) {
+        const found = posts.find((p) => p.id === state.detailPostId);
+        if (found) {
+          setSelectedDetailPost(found);
+        }
+      } else {
+        setSelectedDetailPost(null);
+      }
+
+      // 3. Restore User Profile
+      if (state.userProfileUsername || state.userProfileUid) {
+        handleOpenUserProfile(
+          state.userProfileUsername || state.userProfileUid || '',
+          state.userProfileUid || undefined
+        );
+      } else {
+        setSelectedUserProfile(null);
+      }
+
+      // 4. Restore Direct Messages
+      if (state.isDirectOpen) {
+        setIsDirectModalOpen(true);
+        if (state.directContactUsername) {
+          setDirectTargetUsername(state.directContactUsername);
+        }
+      } else {
+        setIsDirectModalOpen(false);
+        setDirectTargetUsername(null);
+        setDirectTargetUser(null);
+      }
+
+      // 5. Restore Notifications
+      setIsNotificationsOpen(!!state.isNotificationsOpen);
+
+      // 6. Restore Story
+      setActiveStoryIndex(state.storyIndex !== undefined ? state.storyIndex : null);
+
+      // 7. Restore Comments
+      if (state.activeCommentPostId) {
+        const found = posts.find((p) => p.id === state.activeCommentPostId);
+        if (found) {
+          setActiveCommentPost(found);
+        }
+      } else {
+        setActiveCommentPost(null);
+      }
+
+      // 8. Restore Voice Rooms
+      setIsVoiceRoomsListOpen(!!state.isVoiceRoomsListOpen);
+      setIsCreateVoiceRoomOpen(!!state.isCreateVoiceRoomOpen);
+      if (state.voiceRoomId) {
+        const found = voiceRooms.find((r) => r.id === state.voiceRoomId);
+        if (found) {
+          setActiveVoiceRoom(found);
+          setIsVoiceRoomModalOpen(true);
+        }
+      } else {
+        setIsVoiceRoomModalOpen(false);
+      }
+
+      // 9. Restore Menus
+      setIsMenuOpen(!!state.isMenuOpen);
+      setIsCoinModalOpen(!!state.isCoinModalOpen);
+      setIsLoginModalOpen(!!state.isLoginModalOpen);
+
+      setTimeout(() => {
+        isPoppingRef.current = false;
+      }, 50);
+    };
+
+    window.addEventListener('popstate', onPopState);
+    return () => {
+      window.removeEventListener('popstate', onPopState);
+    };
+  }, [posts, voiceRooms, activeTab]);
 
   useEffect(() => {
     if (currentUser) {

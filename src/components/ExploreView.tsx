@@ -375,7 +375,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                   <div className="flex items-center gap-3 min-w-0">
                     {/* Avatar */}
                     <div className="relative flex-none">
-                      <div className="w-12 h-12 rounded-full p-[1.5px] ig-story-gradient flex items-center justify-center">
+                      <div className="w-12 h-12 rounded-full p-[1.5px] noise-story-gradient flex items-center justify-center">
                         <img
                           src={displayAvatar}
                           alt={user.displayName}

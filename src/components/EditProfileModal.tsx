@@ -97,7 +97,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
         {/* Profile Photo Manager */}
         <div className="flex flex-col items-center justify-center pt-5 pb-2 border-b border-zinc-800/60">
           <div className="relative mb-2">
-            <div className="w-20 h-20 rounded-full p-[2px] ig-story-gradient">
+            <div className="w-20 h-20 rounded-full p-[2px] noise-story-gradient">
               <div className="w-full h-full rounded-full bg-zinc-950 p-[2px] overflow-hidden flex items-center justify-center">
                 {hasPhoto ? (
                   <img

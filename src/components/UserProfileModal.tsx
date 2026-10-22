@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { 
   X, 
+  ArrowLeft,
   Check, 
   Copy, 
   MessageCircle, 
@@ -95,6 +96,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Header */}
         <div className="px-4 py-3.5 border-b border-zinc-800/80 flex items-center justify-between bg-zinc-950/90 backdrop-blur-md sticky top-0 z-20">
           <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="p-1 -ml-1 text-zinc-400 hover:text-white rounded-full hover:bg-zinc-900 transition-colors"
+              type="button"
+              title="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
             <span className="font-bold text-white text-sm">@{user.username}</span>
             {user.isVerified && (
               <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white" title="Verified User">
@@ -173,7 +182,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="flex items-center gap-4">
               {/* Avatar with gradient border */}
               <div className="relative">
-                <div className="w-20 h-20 rounded-full p-[2px] ig-story-gradient flex items-center justify-center">
+                <div className="w-20 h-20 rounded-full p-[2px] noise-story-gradient flex items-center justify-center">
                   <img
                     src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.displayName)}&background=3a1af2&color=fff`}
                     alt={user.displayName}

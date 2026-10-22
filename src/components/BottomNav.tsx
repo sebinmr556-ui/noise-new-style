@@ -65,7 +65,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         onClick={() => onTabChange('upload')}
         className="relative flex flex-col items-center justify-center p-1 group transition-all duration-200 active:scale-90 -translate-y-0.5"
         type="button"
-        title="Create New Post or Reel"
+        title="Create New Post or Clip"
       >
         <div 
           className={`p-2 rounded-2xl transition-all duration-200 flex items-center justify-center ${
@@ -78,12 +78,12 @@ export const BottomNav: React.FC<BottomNavProps> = ({
         </div>
       </button>
 
-      {/* Reels */}
+      {/* Video Clips */}
       <button
         onClick={() => onTabChange('reels')}
         className="relative flex flex-col items-center justify-center p-2.5 group transition-all duration-200 active:scale-90"
         type="button"
-        title="Reels"
+        title="Clips"
       >
         <Clapperboard 
           className={`w-[26px] h-[26px] transition-all duration-200 ${

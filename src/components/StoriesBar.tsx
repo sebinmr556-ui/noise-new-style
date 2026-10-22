@@ -36,7 +36,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
             <div 
               className={`w-[66px] h-[66px] rounded-full p-[2px] transition-transform active:scale-95 group-hover:scale-105 ${
                 hasStory 
-                  ? (userStory?.hasSeen ? 'ig-story-viewed' : 'ig-story-gradient')
+                  ? (userStory?.hasSeen ? 'noise-story-viewed' : 'noise-story-gradient')
                   : 'border-2 border-zinc-800 group-hover:border-zinc-600 bg-zinc-900'
               }`}
             >
@@ -96,7 +96,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
             >
               <div
                 className={`w-[66px] h-[66px] rounded-full p-[2px] transition-transform active:scale-95 group-hover:scale-105 ${
-                  isSeen ? 'ig-story-viewed' : 'ig-story-gradient'
+                  isSeen ? 'noise-story-viewed' : 'noise-story-gradient'
                 }`}
               >
                 <div className="w-full h-full rounded-full bg-zinc-950 p-[2px]">

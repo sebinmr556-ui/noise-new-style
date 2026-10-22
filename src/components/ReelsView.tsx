@@ -56,14 +56,14 @@ export const ReelsView: React.FC<ReelsViewProps> = ({ onGoToUpload, allPosts }) 
         <div className="w-16 h-16 rounded-full bg-neutral-900 border border-neutral-800 flex items-center justify-center text-neutral-400 mb-4">
           <Film className="w-8 h-8" />
         </div>
-        <h3 className="text-base font-bold text-white mb-1.5">No Reels Shared Yet</h3>
+        <h3 className="text-base font-bold text-white mb-1.5">No Video Clips Shared Yet</h3>
         <p className="text-xs text-neutral-400 max-w-xs mb-6">
-          Be the first creator to share reels and short videos on Noise!
+          Be the first creator to share video clips and moments on Noise!
         </p>
         {onGoToUpload && (
           <button
             onClick={onGoToUpload}
-            className="px-5 py-2.5 bg-[#0095f6] hover:bg-[#1877f2] text-white text-xs font-bold rounded-xl transition-all"
+            className="px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
             type="button"
           >
             Create Post
