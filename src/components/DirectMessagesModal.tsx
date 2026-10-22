@@ -457,7 +457,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     const currentThread = threads[selectedContact.id] || [];
     const unseenIncomingDocs = currentThread.filter(
       (m) =>
-        m.receiverId === currentUser.uid &&
+        (!m.isMe || m.receiverId === currentUser.uid || (currentUser.username && m.receiverId?.toLowerCase() === currentUser.username.toLowerCase())) &&
         (!m.seenBy || !m.seenBy.includes(currentUser.uid)) &&
         !m.id.startsWith('msg-')
     );
@@ -465,6 +465,25 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     if (unseenIncomingDocs.length === 0) return;
 
     console.log('[DirectMessage] Marking messages as seen for contact:', selectedContact.id, 'Count:', unseenIncomingDocs.length);
+
+    // Update local state immediately so UI updates without network delay
+    setThreads((prev) => {
+      const list = prev[selectedContact.id];
+      if (!list) return prev;
+      let changed = false;
+      const updated = list.map((msg) => {
+        if (!msg.isMe && (!msg.seenBy || !msg.seenBy.includes(currentUser.uid))) {
+          changed = true;
+          return {
+            ...msg,
+            seenBy: Array.from(new Set([...(msg.seenBy || []), currentUser.uid])),
+            read: true,
+          };
+        }
+        return msg;
+      });
+      return changed ? { ...prev, [selectedContact.id]: updated } : prev;
+    });
 
     unseenIncomingDocs.forEach(async (m) => {
       try {
@@ -1187,9 +1206,29 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                         </div>
                         <span className="text-[10px] text-zinc-500 font-mono flex-none ml-2">{contact.time}</span>
                       </div>
-                      <p className={`text-xs truncate ${contact.unread ? 'font-bold text-white' : 'text-zinc-400'}`}>
-                        {contact.lastMessage}
-                      </p>
+                      <div className="flex items-center gap-1 min-w-0">
+                        {(() => {
+                          const contactThread = threads[contact.id] || [];
+                          const lastMsg = contactThread[contactThread.length - 1];
+                          if (lastMsg && lastMsg.isMe) {
+                            const recipientId = lastMsg.receiverId || contact.id;
+                            const isSeen = Boolean(
+                              (recipientId && Array.isArray(lastMsg.seenBy) && lastMsg.seenBy.includes(recipientId)) ||
+                              (contact.id && Array.isArray(lastMsg.seenBy) && lastMsg.seenBy.includes(contact.id)) ||
+                              lastMsg.read === true
+                            );
+                            return isSeen ? (
+                              <CheckCheck className="w-3.5 h-3.5 text-sky-400 flex-none stroke-[2.5]" />
+                            ) : (
+                              <Check className="w-3 h-3 text-zinc-400 flex-none stroke-[2]" />
+                            );
+                          }
+                          return null;
+                        })()}
+                        <p className={`text-xs truncate ${contact.unread ? 'font-bold text-white' : 'text-zinc-400'}`}>
+                          {contact.lastMessage}
+                        </p>
+                      </div>
                     </div>
                     {contact.unread && (
                       <span className="w-2.5 h-2.5 rounded-full bg-gradient-to-r from-rose-500 to-purple-600 flex-none shadow-xs" />
@@ -1482,14 +1521,17 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     <span>{msg.time}</span>
                     {msg.isMe && (
                       (() => {
+                        const recipientId = msg.receiverId || selectedContact?.id || '';
                         const isSeenByRecipient = Boolean(
-                          (msg.seenBy && selectedContact && msg.seenBy.includes(selectedContact.id)) ||
+                          (recipientId && Array.isArray(msg.seenBy) && msg.seenBy.includes(recipientId)) ||
+                          (selectedContact?.id && Array.isArray(msg.seenBy) && msg.seenBy.includes(selectedContact.id)) ||
+                          (selectedContact?.username && Array.isArray(msg.seenBy) && msg.seenBy.includes(selectedContact.username)) ||
                           msg.read === true
                         );
                         if (isSeenByRecipient) {
                           return (
                             <span 
-                              className="inline-flex items-center gap-0.5 text-sky-400 font-medium" 
+                              className="inline-flex items-center gap-1 text-sky-400 font-semibold" 
                               title="Seen by recipient"
                             >
                               <span>Seen</span>
@@ -1499,7 +1541,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                         }
                         return (
                           <span 
-                            className="inline-flex items-center gap-0.5 text-zinc-400" 
+                            className="inline-flex items-center gap-1 text-zinc-400" 
                             title="Sent, not yet seen"
                           >
                             <span>Sent</span>
