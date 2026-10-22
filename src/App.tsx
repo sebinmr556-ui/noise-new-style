@@ -6,6 +6,9 @@ import {
   onAuthStateChanged, 
   fbSignOut,
   collection, 
+  addDoc,
+  deleteDoc,
+  serverTimestamp,
   getDoc,
   getDocs,
   query, 
@@ -396,35 +399,64 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
+    const myUid = auth?.currentUser?.uid || currentUser.uid;
+    let targetPost: Post | undefined;
+
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
-        const isLiked = p.likedBy?.includes(currentUser.uid);
+        const isLiked = p.likedBy?.includes(myUid);
         const likedBy = isLiked
-          ? p.likedBy.filter(uid => uid !== currentUser.uid)
-          : [...(p.likedBy || []), currentUser.uid];
+          ? p.likedBy.filter(uid => uid !== myUid)
+          : [...(p.likedBy || []), myUid];
         const likes = isLiked ? Math.max(0, p.likes - 1) : p.likes + 1;
-        return { ...p, likes, likedBy };
+        targetPost = { ...p, likes, likedBy };
+        return targetPost;
       }
       return p;
     }));
+
+    if (isFirebaseConfigured && db && targetPost && !postId.startsWith('post-')) {
+      try {
+        await updateDoc(doc(db, 'posts', postId), {
+          likes: targetPost.likes,
+          likedBy: targetPost.likedBy,
+        });
+      } catch (e) {
+        console.debug('Error syncing like to Firestore:', e);
+      }
+    }
   };
 
-  const handleSaveToggle = (postId: string) => {
+  const handleSaveToggle = async (postId: string) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
       return;
     }
+    const myUid = auth?.currentUser?.uid || currentUser.uid;
+    let targetPost: Post | undefined;
+
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
         const savedBy = p.savedBy || [];
-        const isSaved = savedBy.includes(currentUser.uid);
+        const isSaved = savedBy.includes(myUid);
         const newSavedBy = isSaved
-          ? savedBy.filter(uid => uid !== currentUser.uid)
-          : [...savedBy, currentUser.uid];
-        return { ...p, savedBy: newSavedBy };
+          ? savedBy.filter(uid => uid !== myUid)
+          : [...savedBy, myUid];
+        targetPost = { ...p, savedBy: newSavedBy };
+        return targetPost;
       }
       return p;
     }));
+
+    if (isFirebaseConfigured && db && targetPost && !postId.startsWith('post-')) {
+      try {
+        await updateDoc(doc(db, 'posts', postId), {
+          savedBy: targetPost.savedBy,
+        });
+      } catch (e) {
+        console.debug('Error syncing savedBy to Firestore:', e);
+      }
+    }
   };
 
   const handleAddComment = async (postId: string, text: string) => {
@@ -432,23 +464,37 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
+    const myUid = auth?.currentUser?.uid || currentUser.uid;
     const newComment: CommentItem = {
       id: `comm-${Date.now()}`,
-      uid: currentUser.uid,
+      uid: myUid,
       username: currentUser.username,
       avatar: currentUser.photoURL,
       text,
       createdAt: new Date().toISOString()
     };
+    let updatedComments: CommentItem[] = [];
+
     setPosts(prev => prev.map(p => {
       if (p.id === postId) {
         const comments = [...(p.comments || []), newComment];
+        updatedComments = comments;
         const updated = { ...p, comments };
         if (activeCommentPost?.id === postId) setActiveCommentPost(updated);
         return updated;
       }
       return p;
     }));
+
+    if (isFirebaseConfigured && db && !postId.startsWith('post-')) {
+      try {
+        await updateDoc(doc(db, 'posts', postId), {
+          comments: updatedComments,
+        });
+      } catch (e) {
+        console.debug('Error syncing comment to Firestore:', e);
+      }
+    }
   };
 
   const handleDeleteComment = (postId: string, commentId: string) => {
@@ -468,10 +514,13 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
+    const senderUid = auth?.currentUser?.uid || currentUser.uid;
     setIsTopLoading(true);
+
+    const localId = `post-${Date.now()}`;
     const post: Post = {
-      id: `post-${Date.now()}`,
-      uid: currentUser.uid,
+      id: localId,
+      uid: senderUid,
       username: currentUser.displayName || currentUser.username,
       avatar: currentUser.photoURL,
       image: newPostData.image,
@@ -486,6 +535,30 @@ export default function App() {
       mediaType: newPostData.mediaType || 'image',
     };
     setPosts(prev => [post, ...prev]);
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = await addDoc(collection(db, 'posts'), {
+          uid: senderUid,
+          username: currentUser.displayName || currentUser.username,
+          avatar: currentUser.photoURL || '',
+          image: newPostData.image,
+          caption: newPostData.caption || '',
+          location: newPostData.location || '',
+          filter: newPostData.filter || '',
+          mediaType: newPostData.mediaType || 'image',
+          likes: 0,
+          likedBy: [],
+          savedBy: [],
+          comments: [],
+          createdAt: serverTimestamp(),
+        });
+        setPosts(prev => prev.map(p => p.id === localId ? { ...p, id: docRef.id } : p));
+      } catch (err) {
+        console.error('Failed to save post to Firestore:', err);
+      }
+    }
+
     setIsTopLoading(false);
     handleTabChange('home');
   };
@@ -493,6 +566,14 @@ export default function App() {
   const handleDeletePost = async (postId: string) => {
     setPosts(prev => prev.filter(p => p.id !== postId));
     if (selectedDetailPost?.id === postId) setSelectedDetailPost(null);
+
+    if (isFirebaseConfigured && db && !postId.startsWith('post-')) {
+      try {
+        await deleteDoc(doc(db, 'posts', postId));
+      } catch (e) {
+        console.debug('Error deleting post from Firestore:', e);
+      }
+    }
   };
 
   const handleBlockUser = async (userUid: string) => {
@@ -642,6 +723,7 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
+    const senderUid = auth?.currentUser?.uid || currentUser.uid;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*,video/*';
@@ -651,11 +733,12 @@ export default function App() {
         setIsTopLoading(true);
         try {
           const base64 = await fileToBase64(file);
+          const localStoryId = `story-${Date.now()}`;
           const newStory: Story = {
-            id: `story-${Date.now()}`,
-            uid: currentUser.uid,
-            userId: currentUser.uid,
-            authorId: currentUser.uid,
+            id: localStoryId,
+            uid: senderUid,
+            userId: senderUid,
+            authorId: senderUid,
             username: currentUser.username,
             avatar: currentUser.photoURL,
             mediaUrl: base64,
@@ -664,6 +747,24 @@ export default function App() {
             hasSeen: false,
           };
           setStories(prev => [newStory, ...prev]);
+
+          if (isFirebaseConfigured && db) {
+            try {
+              const docRef = await addDoc(collection(db, 'stories'), {
+                uid: senderUid,
+                userId: senderUid,
+                authorId: senderUid,
+                username: currentUser.username,
+                avatar: currentUser.photoURL || '',
+                mediaUrl: base64,
+                caption: 'My moment ✨',
+                createdAt: serverTimestamp(),
+              });
+              setStories(prev => prev.map(s => s.id === localStoryId ? { ...s, id: docRef.id } : s));
+            } catch (err) {
+              console.error('Failed to save story to Firestore:', err);
+            }
+          }
         } finally {
           setIsTopLoading(false);
         }
@@ -675,6 +776,14 @@ export default function App() {
   const handleDeleteStory = async (storyId: string) => {
     setStories(prev => prev.filter(s => s.id !== storyId));
     setActiveStoryIndex(null);
+
+    if (isFirebaseConfigured && db && !storyId.startsWith('story-')) {
+      try {
+        await deleteDoc(doc(db, 'stories', storyId));
+      } catch (e) {
+        console.debug('Error deleting story from Firestore:', e);
+      }
+    }
   };
 
   const handleCreateVoiceRoom = async (roomData: { title: string; topic: string; tags: string[]; ambientVibe: any }) => {
