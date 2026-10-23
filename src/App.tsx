@@ -46,7 +46,7 @@ import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { TopLoadingBar } from './components/TopLoadingBar';
 import { PullToRefresh } from './components/PullToRefresh';
-import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock, Radio, MessageCircle, Heart } from 'lucide-react';
+import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock, Radio, MessageCircle, Heart, Crown, CreditCard, Sparkles } from 'lucide-react';
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -56,6 +56,9 @@ const fileToBase64 = (file: File): Promise<string> => {
     reader.onerror = (error) => reject(error);
   });
 };
+
+// 👑 Ee rand perkk maathram unlimited coin free access:
+const UNLIMITED_COIN_USERS = ['sebin_mr', 'nora_____noraaa'];
 
 export default function App() {
   const initialNav = useRef<AppNavState>(parseUrlToNavState()).current;
@@ -121,10 +124,21 @@ export default function App() {
   const [isTopLoading, setIsTopLoading] = useState(false);
   const [isRefreshingFeed, setIsRefreshingFeed] = useState(false);
 
-  const [coinsBalance, setCoinsBalance] = useState<number>(150);
+  const [coinsBalance, setCoinsBalance] = useState<number>(() => {
+    try {
+      const savedCoins = localStorage.getItem('noise_coins_balance');
+      return savedCoins ? parseInt(savedCoins, 10) : 150;
+    } catch {
+      return 150;
+    }
+  });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
+
+  // VIP Checker logic
+  const currentHandle = (currentUser?.username || '').toLowerCase().replace('@', '');
+  const isVipUnlimitedUser = UNLIMITED_COIN_USERS.includes(currentHandle);
 
   const [followingList, setFollowingList] = useState<string[]>(() => {
     try {
@@ -266,7 +280,6 @@ export default function App() {
     if (stepCountRef.current > 0 || (window.history.state && typeof window.history.state.stepIndex === 'number' && window.history.state.stepIndex > 0)) {
       window.history.back();
     } else {
-      // Step-by-step fallback for direct URLs or refreshes
       if (isCoinModalOpen) {
         setIsCoinModalOpen(false);
         pushNav({ isCoinModalOpen: false }, true);
@@ -309,6 +322,37 @@ export default function App() {
         handleTabChange('home');
       }
     }
+  };
+
+  // 🪙 Coin Purchase and VIP Grant Handler
+  const handlePurchaseCoins = async (coinsToAdd: number, price: number) => {
+    if (!currentUser) {
+      setIsLoginModalOpen(true);
+      return;
+    }
+
+    if (isVipUnlimitedUser) {
+      // Free unlimited refill for @sebin_mr & @nora_____noraaa
+      const updatedBalance = coinsBalance + coinsToAdd;
+      setCoinsBalance(updatedBalance);
+      localStorage.setItem('noise_coins_balance', updatedBalance.toString());
+
+      if (isFirebaseConfigured && db) {
+        try {
+          await updateDoc(doc(db, 'users', currentUser.uid), {
+            coins: updatedBalance,
+          });
+        } catch (e) {
+          console.debug('VIP coins Firestore update error:', e);
+        }
+      }
+
+      alert(`👑 VIP Auto-Approved! ${coinsToAdd.toLocaleString()} Coins added to @${currentHandle}. New Balance: ${updatedBalance.toLocaleString()}`);
+      return;
+    }
+
+    // Normal Users Payment Protection
+    alert(`💳 Checkout Gateway: To add ${coinsToAdd.toLocaleString()} Coins, please complete payment of $${price.toFixed(2)}. Direct unlimited grant is restricted to VIP accounts.`);
   };
 
   const handleOpenDetailPost = (post: Post) => {
@@ -365,7 +409,6 @@ export default function App() {
       const state: AppNavState = e.state || parseUrlToNavState(activeTab);
       navStateRef.current = state;
 
-      // 1. Restore tab without redirecting to home
       if (state.tab && ['home', 'search', 'upload', 'reels', 'profile'].includes(state.tab)) {
         setActiveTab(state.tab);
         try {
@@ -373,17 +416,13 @@ export default function App() {
         } catch {}
       }
 
-      // 2. Restore Post Detail
       if (state.detailPostId) {
         const found = posts.find((p) => p.id === state.detailPostId);
-        if (found) {
-          setSelectedDetailPost(found);
-        }
+        if (found) setSelectedDetailPost(found);
       } else {
         setSelectedDetailPost(null);
       }
 
-      // 3. Restore User Profile
       if (state.userProfileUsername || state.userProfileUid) {
         handleOpenUserProfile(
           state.userProfileUsername || state.userProfileUid || '',
@@ -393,7 +432,6 @@ export default function App() {
         setSelectedUserProfile(null);
       }
 
-      // 4. Restore Direct Messages
       if (state.isDirectOpen) {
         setIsDirectModalOpen(true);
         if (state.directContactUsername) {
@@ -405,23 +443,16 @@ export default function App() {
         setDirectTargetUser(null);
       }
 
-      // 5. Restore Notifications
       setIsNotificationsOpen(!!state.isNotificationsOpen);
-
-      // 6. Restore Story
       setActiveStoryIndex(state.storyIndex !== undefined ? state.storyIndex : null);
 
-      // 7. Restore Comments
       if (state.activeCommentPostId) {
         const found = posts.find((p) => p.id === state.activeCommentPostId);
-        if (found) {
-          setActiveCommentPost(found);
-        }
+        if (found) setActiveCommentPost(found);
       } else {
         setActiveCommentPost(null);
       }
 
-      // 8. Restore Voice Rooms
       setIsVoiceRoomsListOpen(!!state.isVoiceRoomsListOpen);
       setIsCreateVoiceRoomOpen(!!state.isCreateVoiceRoomOpen);
       if (state.voiceRoomId) {
@@ -434,7 +465,6 @@ export default function App() {
         setIsVoiceRoomModalOpen(false);
       }
 
-      // 9. Restore Menus
       setIsMenuOpen(!!state.isMenuOpen);
       setIsCoinModalOpen(!!state.isCoinModalOpen);
       setIsLoginModalOpen(!!state.isLoginModalOpen);
@@ -490,6 +520,10 @@ export default function App() {
               if (typeof data.followersCount === 'number') followersCount = data.followersCount;
               if (typeof data.followingCount === 'number') followingCount = data.followingCount;
               if (Array.isArray(data.blockedUsers)) blockedUsers = data.blockedUsers;
+              if (typeof data.coins === 'number') {
+                setCoinsBalance(data.coins);
+                localStorage.setItem('noise_coins_balance', data.coins.toString());
+              }
             } else {
               await syncUserToDatabase({
                 uid: user.uid,
@@ -1138,7 +1172,6 @@ export default function App() {
       return;
     }
 
-    // Close open modals when switching tabs
     setSelectedDetailPost(null);
     setSelectedUserProfile(null);
     setIsDirectModalOpen(false);
@@ -1234,16 +1267,20 @@ export default function App() {
             {currentUser && (
               <button
                 onClick={handleOpenCoinModal}
-                className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-full text-xs font-bold text-amber-400 hover:bg-zinc-800 transition-all"
+                className={`flex items-center gap-1 border px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+                  isVipUnlimitedUser 
+                    ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                    : 'bg-zinc-900 border-zinc-800 text-amber-400 hover:bg-zinc-800'
+                }`}
               >
-                <Coins className="w-3.5 h-3.5" />
-                <span>{coinsBalance}</span>
+                {isVipUnlimitedUser ? <Crown className="w-3.5 h-3.5 text-amber-400" /> : <Coins className="w-3.5 h-3.5" />}
+                <span>{coinsBalance.toLocaleString()}</span>
+                {isVipUnlimitedUser && <span className="text-[9px] bg-amber-400 text-black px-1 rounded font-black">VIP</span>}
               </button>
             )}
           </div>
 
           <div className="flex items-center gap-1 sm:gap-1.5">
-            {/* Voice Rooms Bar Trigger */}
             <button
               onClick={() => {
                 if (activeVoiceRoom) {
@@ -1266,7 +1303,6 @@ export default function App() {
               )}
             </button>
 
-            {/* Notifications */}
             <button
               onClick={handleOpenNotifications}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95"
@@ -1277,7 +1313,6 @@ export default function App() {
               <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-zinc-950" />
             </button>
 
-            {/* Direct Messages */}
             <button
               onClick={() => handleOpenDirect()}
               className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
@@ -1287,7 +1322,6 @@ export default function App() {
               <MessageCircle className="w-5 h-5 group-hover:scale-110 group-hover:text-white transition-transform" />
             </button>
 
-            {/* Menu */}
             <button
               onClick={handleOpenMenu}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all"
@@ -1436,14 +1470,18 @@ export default function App() {
                     setIsMenuOpen(false);
                     setIsCoinModalOpen(true);
                   }}
-                  className="w-full flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 hover:bg-zinc-800 transition-all text-left"
+                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
+                    isVipUnlimitedUser
+                      ? 'bg-amber-500/15 border border-amber-400/40 hover:bg-amber-500/25'
+                      : 'bg-zinc-800/50 hover:bg-zinc-800'
+                  }`}
                 >
                   <div className="flex items-center gap-3">
-                    <Coins className="w-5 h-5 text-amber-400" />
-                    <span className="text-sm font-medium">Buy Coins</span>
+                    {isVipUnlimitedUser ? <Crown className="w-5 h-5 text-amber-400" /> : <Coins className="w-5 h-5 text-amber-400" />}
+                    <span className="text-sm font-medium">{isVipUnlimitedUser ? 'VIP Unlimited Vault' : 'Buy Coins'}</span>
                   </div>
-                  <span className="text-xs bg-amber-400/10 text-amber-400 px-2 py-0.5 rounded-full font-bold">
-                    {coinsBalance} Coins
+                  <span className="text-xs bg-amber-400/10 text-amber-400 px-2.5 py-0.5 rounded-full font-bold">
+                    {coinsBalance.toLocaleString()} Coins
                   </span>
                 </button>
 
@@ -1502,47 +1540,86 @@ export default function App() {
           </div>
         )}
 
-        {/* Coins Purchase Modal */}
+        {/* 🌟 COIN PURCHASE MODAL (VIP Unlimited for @sebin_mr & @nora_____noraaa, Cash for Others) */}
         {isCoinModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-5 animate-in zoom-in-95 duration-200">
-              <div className="flex items-center justify-between">
+            <div className="w-full max-w-sm bg-zinc-900 border border-amber-500/40 rounded-3xl p-5 space-y-4 animate-in zoom-in-95 duration-200 text-white shadow-2xl">
+              
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                 <div className="flex items-center gap-2">
-                  <Coins className="w-6 h-6 text-amber-400" />
-                  <h3 className="text-lg font-bold text-white">Get More Coins</h3>
+                  {isVipUnlimitedUser ? (
+                    <Crown className="w-5 h-5 text-amber-400 animate-bounce" />
+                  ) : (
+                    <Coins className="w-5 h-5 text-amber-400" />
+                  )}
+                  <h3 className="text-base font-black uppercase tracking-wider text-amber-300">
+                    {isVipUnlimitedUser ? 'VIP Unlimited Vault' : 'Coin Store'}
+                  </h3>
                 </div>
                 <button
                   onClick={handleBack}
-                  className="text-zinc-400 hover:text-white"
+                  className="text-zinc-400 hover:text-white p-1 rounded-full hover:bg-zinc-800"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => {
-                    setCoinsBalance(c => c + 100);
-                    handleBack();
-                    alert('Successfully added 100 Coins!');
-                  }}
-                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
-                >
-                  <p className="text-xl font-extrabold text-amber-400">100</p>
-                  <p className="text-xs text-zinc-400 mt-1">$0.99</p>
-                </button>
+              {/* Status Header */}
+              <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block">Account ID</span>
+                  <span className="text-xs font-bold text-zinc-200">@{currentHandle || 'guest'}</span>
+                </div>
+                <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-full ${
+                  isVipUnlimitedUser 
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-400/50 shadow-md' 
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}>
+                  {isVipUnlimitedUser ? '👑 Unlimited VIP' : 'Standard User'}
+                </span>
+              </div>
 
-                <button
-                  onClick={() => {
-                    setCoinsBalance(c => c + 550);
-                    handleBack();
-                    alert('Successfully added 550 Coins!');
-                  }}
-                  className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
-                >
-                  <p className="text-xl font-extrabold text-amber-400">550</p>
-                  <p className="text-xs text-zinc-400 mt-1">$4.99</p>
-                </button>
+              {/* Coin Packs */}
+              <div className="space-y-2.5 max-h-72 overflow-y-auto py-1">
+                {[
+                  { coins: 1000, price: 0.99, tag: 'Starter' },
+                  { coins: 5000, price: 4.99, tag: 'Popular' },
+                  { coins: 20000, price: 14.99, tag: 'Super VIP' },
+                  { coins: 100000, price: 49.99, tag: 'Hyper King' },
+                ].map((pack) => (
+                  <div
+                    key={pack.coins}
+                    className="p-3 rounded-2xl bg-zinc-950/80 border border-zinc-800/80 flex items-center justify-between hover:border-amber-400/40 transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-base font-black text-amber-300">🪙 {pack.coins.toLocaleString()}</span>
+                        <span className="text-[9px] px-1.5 py-0.2 rounded bg-amber-400/10 text-amber-400 font-bold">
+                          {pack.tag}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">
+                        {isVipUnlimitedUser ? 'VIP Free Refill' : `Price: $${pack.price.toFixed(2)}`}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePurchaseCoins(pack.coins, pack.price)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-md ${
+                        isVipUnlimitedUser
+                          ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black hover:brightness-110 shadow-amber-500/20'
+                          : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
+                      }`}
+                    >
+                      {isVipUnlimitedUser ? 'Claim Free' : `$${pack.price}`}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="text-center pt-1 border-t border-zinc-800/80 text-[10px] text-zinc-500">
+                Current Coins Balance: <span className="text-amber-400 font-bold">{coinsBalance.toLocaleString()}</span>
               </div>
             </div>
           </div>
