@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Noise</string>
+    <string name="tab_home">Home</string>
+    <string name="tab_explore">Explore</string>
+    <string name="tab_upload">Create</string>
+    <string name="tab_reels">Reels</string>
+    <string name="tab_profile">Profile</string>
+</resources>

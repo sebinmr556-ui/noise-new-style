@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="noise_bg">#09090B</color>
+    <color name="noise_surface">#18181B</color>
+    <color name="noise_cyan">#00D4FF</color>
+    <color name="noise_purple">#A855F7</color>
+    <color name="noise_blue">#3B82F6</color>
+    <color name="noise_indigo">#6366F1</color>
+    <color name="noise_red">#EF4444</color>
+    <color name="noise_border">#27272A</color>
+    <color name="noise_text_secondary">#A1A1AA</color>
+</resources>
