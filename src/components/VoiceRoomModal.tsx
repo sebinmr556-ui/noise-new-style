@@ -72,25 +72,20 @@ const LUXURY_THEMES = [
   {
     id: 'supercar',
     name: 'Cyber Supercar',
-    image: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
+    // Realistic Red & Gold glowing front hypercar
+    image: 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=1000&q=80',
     cost: 15000
   },
   {
     id: 'crescent_palace',
     name: 'Crescent Palace',
-    image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1000&q=80',
     cost: 15000
   },
   {
     id: 'golden_phoenix',
     name: 'Golden Phoenix',
-    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
-    cost: 15000
-  },
-  {
-    id: 'fantasy_portal',
-    name: 'Fantasy Portal',
-    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
+    image: 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?auto=format&fit=crop&w=1000&q=80',
     cost: 15000
   }
 ];
@@ -117,18 +112,15 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
 
-  // Active Wallpaper Theme
   const [currentTheme, setCurrentTheme] = useState(LUXURY_THEMES[0]);
   const [showThemeModal, setShowThemeModal] = useState(false);
 
-  // Gifting System
   const [showGiftModal, setShowGiftModal] = useState(false);
   const [selectedGiftTab, setSelectedGiftTab] = useState<'Hot' | 'Classic' | '3D' | 'VIP'>('Hot');
   const [selectedGift, setSelectedGift] = useState<GiftItem>(LUXURY_GIFTS[0]);
   const [userCoins, setUserCoins] = useState(2510);
   const [flyingGift, setFlyingGift] = useState<string | null>(null);
 
-  // PK Battle State
   const [pkBattle, setPkBattle] = useState<PKBattle | null>({
     isActive: true,
     teamRed: {
@@ -157,13 +149,11 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
   const isSpeaker = isHost || room.speakers.some((s) => s.uid === currentUser?.uid);
 
-  // Seat Slots 3 to 10 (Total 8 bottom slots, matching reference)
   const bottomSlots: (RoomParticipant | null)[] = Array.from({ length: 8 }, (_, i) => {
     const otherSpeakers = room.speakers.filter((s) => s.uid !== room.hostUid);
     return otherSpeakers[i + 1] || null;
   });
 
-  // Real-Time Messages
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !room?.id) return;
 
@@ -193,7 +183,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     return () => unsubscribe();
   }, [room?.id]);
 
-  // Audio Stream Setup
   useEffect(() => {
     if (isSpeaker && !localStream) {
       navigator.mediaDevices.getUserMedia({ audio: true, video: false })
@@ -234,7 +223,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     if (micHandleRef.current) micHandleRef.current.setMuted(isMuted);
   }, [isMuted, localStream]);
 
-  // PK Timer
   useEffect(() => {
     if (!pkBattle?.isActive) return;
     const timer = setInterval(() => {
@@ -356,7 +344,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-3xl select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black select-none">
       
       {/* Floating Reactions */}
       <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
@@ -371,30 +359,32 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         ))}
       </div>
 
-      {/* Main Container */}
-      <div className="w-full h-full max-w-[430px] relative flex flex-col bg-black sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/40 shadow-[0_0_100px_rgba(245,158,11,0.25)] overflow-hidden">
+      {/* Main Screen Container */}
+      <div className="w-full h-full max-w-[430px] relative flex flex-col bg-zinc-950 sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/40 shadow-[0_0_100px_rgba(245,158,11,0.25)] overflow-hidden">
         
         {/* ========================================================= */}
-        {/* 🔥 LIVE DYNAMIC STAGE WALLPAPER                           */}
+        {/* 🔥 REALISTIC SUPERCAR & GOLDEN STAGE SUNBURST BACKGROUND   */}
         {/* ========================================================= */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-          {/* Top Stage Spotlight */}
-          <div className="absolute top-0 inset-x-0 h-96 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-400/40 via-amber-700/20 to-transparent z-10" />
+          {/* Top Golden Sunburst / Light Beams */}
+          <div className="absolute -top-10 inset-x-0 h-[420px] bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-amber-600/30 via-yellow-400/40 to-amber-600/30 blur-xl opacity-80 z-10" />
 
-          {/* Active Wallpaper Image */}
-          <img 
-            src={currentTheme.image} 
-            alt={currentTheme.name} 
-            className="w-full h-full object-cover object-center brightness-95 contrast-125 scale-105 transition-all duration-700"
-          />
+          {/* Hypercar Visual */}
+          <div className="absolute inset-0 z-0 flex items-center justify-center">
+            <img 
+              src={currentTheme.image} 
+              alt={currentTheme.name} 
+              className="w-full h-full object-cover object-bottom brightness-90 contrast-125 scale-110"
+            />
+          </div>
 
-          {/* Vignette Shades */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black z-10" />
-          <div className="absolute bottom-28 inset-x-0 h-80 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
+          {/* Luxury Atmosphere Overlays */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black z-10" />
+          <div className="absolute bottom-28 inset-x-0 h-96 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
         </div>
 
         {/* ========================================================= */}
-        {/* 1. TOP STATUS CAPSULE                                     */}
+        {/* 1. TOP HEADER BAR                                         */}
         {/* ========================================================= */}
         <div className="pt-3 px-3.5 pb-1 flex items-center justify-between z-30">
           <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-amber-400/40 rounded-full py-1 pl-1 pr-3 shadow-lg">
@@ -423,19 +413,18 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Theme Switcher Button */}
+            {/* Theme Store Button */}
             <button 
               onClick={() => setShowThemeModal(true)}
               className="w-7 h-7 bg-black/60 border border-amber-400/40 rounded-full text-amber-300 flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-transform"
-              title="Change Stage Theme"
+              title="Theme Store"
             >
               <Palette className="w-3.5 h-3.5" />
             </button>
 
-            {/* Audience Count */}
             <button 
               onClick={() => setShowAudienceSheet(!showAudienceSheet)}
-              className="flex items-center gap-1 bg-black/60 px-2 py-1 rounded-full border border-white/15 text-[10px] font-bold text-amber-300"
+              className="flex items-center gap-1 bg-black/60 px-2.5 py-1 rounded-full border border-white/15 text-[10px] font-bold text-amber-300"
             >
               <Users className="w-3.5 h-3.5 text-amber-400" />
               <span>{room.listeners.length + room.speakers.length}</span>
@@ -467,13 +456,13 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* 2. TOP PK PODIUM (Winged Golden Crown & Phoenix Crest)     */}
+        {/* 2. TOP PK PODIUM (Host Crown & Challenger Crest)          */}
         {/* ========================================================= */}
-        <div className="relative z-20 px-4 pt-2 pb-1 flex items-center justify-center gap-8">
+        <div className="relative z-20 px-4 pt-1 pb-1 flex items-center justify-center gap-8">
           {/* Seat 1: Host */}
           <div className="flex flex-col items-center">
             <div className="relative">
-              <div className="w-[72px] h-[72px] rounded-full p-1 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 shadow-[0_0_25px_rgba(245,158,11,0.6)]">
+              <div className="w-[68px] h-[68px] rounded-full p-1 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 shadow-[0_0_25px_rgba(245,158,11,0.7)]">
                 <img 
                   src={room.hostAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop"} 
                   alt="Rank 1" 
@@ -481,7 +470,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 />
               </div>
 
-              {/* Winged Golden Crown Badge */}
+              {/* Gold Crown Banner */}
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-yellow-200 whitespace-nowrap">
                 👑 1 Host
               </div>
@@ -492,11 +481,11 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 <span className="w-0.5 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
-            <span className="text-xs font-bold text-amber-200 mt-2">@{room.hostUsername}</span>
+            <span className="text-xs font-bold text-amber-200 mt-1.5">@{room.hostUsername}</span>
             <span className="text-[11px] text-amber-400 font-extrabold">💎 2.5K</span>
           </div>
 
-          {/* PK Versus Badge */}
+          {/* PK Swords Badge */}
           <div className="flex flex-col items-center justify-center">
             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-rose-600 flex items-center justify-center shadow-[0_0_18px_rgba(244,63,94,0.7)] border border-yellow-300/60">
               <Swords className="w-4 h-4 text-white stroke-[2.5]" />
@@ -509,7 +498,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           {/* Seat 2: Challenger */}
           <div className="flex flex-col items-center">
             <div className="relative">
-              <div className="w-[72px] h-[72px] rounded-full p-1 bg-gradient-to-b from-rose-500 via-purple-600 to-amber-600 shadow-[0_0_25px_rgba(244,63,94,0.6)]">
+              <div className="w-[68px] h-[68px] rounded-full p-1 bg-gradient-to-b from-rose-500 via-purple-600 to-amber-600 shadow-[0_0_25px_rgba(244,63,94,0.7)]">
                 <img 
                   src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop" 
                   alt="Rank 2" 
@@ -527,16 +516,16 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 <span className="w-0.5 h-3 bg-rose-300 rounded-full animate-bounce [animation-delay:200ms]" />
               </div>
             </div>
-            <span className="text-xs font-bold text-zinc-200 mt-2">King Jr</span>
+            <span className="text-xs font-bold text-zinc-200 mt-1.5">King Jr</span>
             <span className="text-[11px] text-rose-400 font-extrabold">💎 1.8K</span>
           </div>
         </div>
 
         {/* ========================================================= */}
-        {/* 3. 8 MIC SEATS (Seats 3 to 10 arranged over Supercar Hood) */}
+        {/* 3. 8 MIC SEATS (Translucent Glassmorphic Circles - Exact Match) */}
         {/* ========================================================= */}
         <div className="relative z-20 flex-1 px-4 py-2 flex flex-col justify-center">
-          <div className="grid grid-cols-4 gap-y-4 gap-x-2 max-w-sm mx-auto w-full">
+          <div className="grid grid-cols-4 gap-y-4 gap-x-2.5 max-w-sm mx-auto w-full">
             {bottomSlots.map((seat, index) => {
               const seatNum = index + 3; // Seats 3 to 10
               const isOccupied = Boolean(seat);
@@ -546,7 +535,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 <div key={seatNum} className="flex flex-col items-center">
                   <div className="relative w-14 h-14">
                     {isOccupied && seat ? (
-                      <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-rose-500 to-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]">
+                      <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-rose-500 to-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]">
                         <img 
                           src={seat.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(seat.username)}`} 
                           alt={seat.username} 
@@ -554,15 +543,17 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                         />
                       </div>
                     ) : isLocked ? (
-                      <div className="w-14 h-14 rounded-full bg-black/75 border border-zinc-700/80 flex items-center justify-center text-zinc-400 shadow-inner">
-                        <Lock className="w-5 h-5 text-zinc-400" />
+                      /* Solid Glassmorphic Locked Button */
+                      <div className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white/50 shadow-lg">
+                        <Lock className="w-5 h-5 text-white/60" />
                       </div>
                     ) : (
+                      /* Solid Glassmorphic Add User (+) Button (Like in reference) */
                       <button 
                         onClick={() => handleTakeSeat(index)}
-                        className="w-14 h-14 rounded-full bg-black/60 border-2 border-dashed border-amber-400/60 flex items-center justify-center text-amber-300 hover:border-amber-300 hover:scale-105 active:scale-95 transition-all shadow-md group"
+                        className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/20 hover:border-amber-400/80 hover:bg-white/15 flex items-center justify-center text-white/80 hover:text-amber-300 hover:scale-105 active:scale-95 transition-all shadow-lg group"
                       >
-                        <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                        <span className="text-xl font-light group-hover:scale-110 transition-transform">+</span>
                       </button>
                     )}
                     
@@ -685,7 +676,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         )}
 
         {/* ========================================================= */}
-        {/* 7. GIFT COIN DRAWER MODAL (Matches Left Screen in Photo)   */}
+        {/* 7. GIFT COIN DRAWER MODAL                                 */}
         {/* ========================================================= */}
         {showGiftModal && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -693,7 +684,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               className="w-full max-w-[430px] mx-auto bg-gradient-to-b from-purple-950/90 via-zinc-950 to-black border-t-2 border-purple-500/50 rounded-t-3xl p-4 shadow-2xl flex flex-col max-h-[62vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Drawer Purple Header Bar */}
               <div className="flex items-center justify-between pb-3 border-b border-purple-800/40">
                 <div className="flex items-center gap-2">
                   <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-400 to-yellow-500 flex items-center justify-center text-black text-xs font-bold">
@@ -709,7 +699,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 </button>
               </div>
 
-              {/* Category Filter Tabs */}
               <div className="flex items-center gap-5 py-2.5 border-b border-zinc-800/80 text-xs font-bold text-zinc-400">
                 {(['Hot', 'Classic', '3D', 'VIP'] as const).map((tab) => (
                   <button
@@ -726,7 +715,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 ))}
               </div>
 
-              {/* 8-Grid Gift Icons */}
               <div className="grid grid-cols-4 gap-2.5 py-3 overflow-y-auto max-h-52">
                 {LUXURY_GIFTS.filter(g => selectedGiftTab === 'Hot' || g.category === selectedGiftTab).map((gift) => {
                   const isSelected = selectedGift.id === gift.id;
@@ -750,7 +738,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 })}
               </div>
 
-              {/* Bottom Wallet & Top Up */}
               <div className="pt-2.5 border-t border-zinc-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5 bg-black/60 px-3 py-1.5 rounded-full border border-amber-500/30">
@@ -774,7 +761,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         )}
 
         {/* ========================================================= */}
-        {/* 8. THEME STORE MODAL (Matches Right Screen in Photo)       */}
+        {/* 8. THEME STORE MODAL                                      */}
         {/* ========================================================= */}
         {showThemeModal && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -792,21 +779,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 </button>
               </div>
 
-              {/* Theme Categories */}
-              <div className="flex items-center gap-3 py-3">
-                <button className="px-4 py-1 rounded-full text-xs font-bold bg-white/5 text-zinc-400">
-                  Gallery
-                </button>
-                <button className="px-4 py-1 rounded-full text-xs font-black bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-md">
-                  Premium
-                </button>
-                <button className="px-4 py-1 rounded-full text-xs font-bold bg-white/5 text-zinc-400">
-                  Customize
-                </button>
-              </div>
-
-              {/* Theme Grid */}
-              <div className="grid grid-cols-3 gap-2.5 py-2 overflow-y-auto max-h-72">
+              <div className="grid grid-cols-3 gap-2.5 py-4 overflow-y-auto max-h-72">
                 {LUXURY_THEMES.map((theme) => {
                   const isSelected = currentTheme.id === theme.id;
                   return (
