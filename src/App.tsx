@@ -843,11 +843,12 @@ export default function App() {
     }
   };
 
-  const handleOpenDirect = (target: string | PublicUserProfile, targetUid?: string) => {
+  const handleOpenDirect = (target?: string | PublicUserProfile, targetUid?: string) => {
     if (typeof target === 'object' && target) {
       setDirectTargetUser(target);
       setDirectTargetUsername(target.username);
-    } else {
+      pushNav({ isDirectOpen: true, directContactUsername: target.username, directContactId: target.uid });
+    } else if (typeof target === 'string') {
       setDirectTargetUsername(target);
       setDirectTargetUser(targetUid ? {
         uid: targetUid,
@@ -858,6 +859,11 @@ export default function App() {
         followersCount: 0,
         followingCount: 0,
       } : null);
+      pushNav({ isDirectOpen: true, directContactUsername: target, directContactId: targetUid });
+    } else {
+      setDirectTargetUsername(null);
+      setDirectTargetUser(null);
+      pushNav({ isDirectOpen: true, directContactUsername: null, directContactId: null });
     }
     setIsDirectModalOpen(true);
   };
@@ -928,6 +934,10 @@ export default function App() {
   const handleOpenUserProfile = async (userOrUsername: string | PublicUserProfile, userUid?: string, avatarUrl?: string) => {
     if (typeof userOrUsername === 'object' && userOrUsername) {
       setSelectedUserProfile(userOrUsername);
+      pushNav({
+        userProfileUsername: userOrUsername.username,
+        userProfileUid: userOrUsername.uid,
+      });
       return;
     }
     const username = userOrUsername;
@@ -936,6 +946,10 @@ export default function App() {
       const regUser = await getRegisteredUserById(searchId);
       if (regUser) {
         setSelectedUserProfile(regUser);
+        pushNav({
+          userProfileUsername: regUser.username,
+          userProfileUid: regUser.uid,
+        });
         return;
       }
     } catch (e) {
@@ -943,7 +957,7 @@ export default function App() {
     }
 
     const matchedPost = posts.find(p => (userUid && p.uid === userUid) || p.username.toLowerCase() === username.toLowerCase());
-    setSelectedUserProfile({
+    const fallbackProfile: PublicUserProfile = {
       uid: matchedPost?.uid || userUid || username,
       userId: matchedPost?.uid || userUid || username,
       username: matchedPost?.username || username,
@@ -952,6 +966,11 @@ export default function App() {
       followersCount: 1,
       followingCount: 0,
       isVerified: !!matchedPost?.isVerified,
+    };
+    setSelectedUserProfile(fallbackProfile);
+    pushNav({
+      userProfileUsername: fallbackProfile.username,
+      userProfileUid: fallbackProfile.uid,
     });
   };
 
@@ -1110,13 +1129,53 @@ export default function App() {
   const handleTabChange = (tab: NavTab) => {
     if (!currentUser && (tab === 'upload' || tab === 'profile')) {
       setIsLoginModalOpen(true);
-    } else {
-      setActiveTab(tab);
-      try {
-        sessionStorage.setItem('noise_active_tab', tab);
-      } catch {}
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      pushNav({ isLoginModalOpen: true });
+      return;
     }
+
+    if (activeTab === tab && !hasAnyModalOpen()) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Close open modals when switching tabs
+    setSelectedDetailPost(null);
+    setSelectedUserProfile(null);
+    setIsDirectModalOpen(false);
+    setIsNotificationsOpen(false);
+    setActiveStoryIndex(null);
+    setActiveCommentPost(null);
+    setIsVoiceRoomsListOpen(false);
+    setIsCreateVoiceRoomOpen(false);
+    setIsVoiceRoomModalOpen(false);
+    setIsMenuOpen(false);
+    setIsCoinModalOpen(false);
+    setIsLoginModalOpen(false);
+
+    setActiveTab(tab);
+    try {
+      sessionStorage.setItem('noise_active_tab', tab);
+    } catch {}
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    pushNav({
+      tab,
+      detailPostId: null,
+      userProfileUsername: null,
+      userProfileUid: null,
+      isDirectOpen: false,
+      directContactUsername: null,
+      directContactId: null,
+      isNotificationsOpen: false,
+      storyIndex: null,
+      activeCommentPostId: null,
+      isVoiceRoomsListOpen: false,
+      isCreateVoiceRoomOpen: false,
+      voiceRoomId: null,
+      isMenuOpen: false,
+      isCoinModalOpen: false,
+      isLoginModalOpen: false,
+    });
   };
 
   const handleRefreshFeed = async () => {
@@ -1174,7 +1233,7 @@ export default function App() {
             </h1>
             {currentUser && (
               <button
-                onClick={() => setIsCoinModalOpen(true)}
+                onClick={handleOpenCoinModal}
                 className="flex items-center gap-1 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-full text-xs font-bold text-amber-400 hover:bg-zinc-800 transition-all"
               >
                 <Coins className="w-3.5 h-3.5" />
@@ -1189,8 +1248,9 @@ export default function App() {
               onClick={() => {
                 if (activeVoiceRoom) {
                   setIsVoiceRoomModalOpen(true);
+                  pushNav({ voiceRoomId: activeVoiceRoom.id });
                 } else {
-                  setIsVoiceRoomsListOpen(true);
+                  handleOpenVoiceRoomsList();
                 }
               }}
               className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group flex items-center active:scale-95"
@@ -1208,7 +1268,7 @@ export default function App() {
 
             {/* Notifications */}
             <button
-              onClick={() => setIsNotificationsOpen(true)}
+              onClick={handleOpenNotifications}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95"
               type="button"
               title="Notifications"
@@ -1219,7 +1279,7 @@ export default function App() {
 
             {/* Direct Messages */}
             <button
-              onClick={() => setIsDirectModalOpen(true)}
+              onClick={() => handleOpenDirect()}
               className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
               type="button"
               title="Direct Messages & Inbox"
@@ -1229,7 +1289,7 @@ export default function App() {
 
             {/* Menu */}
             <button
-              onClick={() => setIsMenuOpen(true)}
+              onClick={handleOpenMenu}
               className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all"
               type="button"
             >
@@ -1246,22 +1306,16 @@ export default function App() {
                 <StoriesBar
                   stories={visibleStories}
                   currentUser={currentUser}
-                  onOpenStory={(idx) => setActiveStoryIndex(idx)}
+                  onOpenStory={(idx) => handleOpenStory(idx)}
                   onAddStory={handleAddUserStory}
                 />
 
                 <LiveVoiceRoomsBar
                   rooms={voiceRooms}
                   currentUser={currentUser}
-                  onOpenCreateRoom={() => {
-                    if (currentUser) {
-                      setIsCreateVoiceRoomOpen(true);
-                    } else {
-                      setIsLoginModalOpen(true);
-                    }
-                  }}
+                  onOpenCreateRoom={handleOpenCreateVoiceRoom}
                   onJoinRoom={handleJoinVoiceRoom}
-                  onOpenAllRooms={() => setIsVoiceRoomsListOpen(true)}
+                  onOpenAllRooms={handleOpenVoiceRoomsList}
                 />
 
                 <div className="divide-y-8 divide-black bg-black sm:bg-zinc-950 sm:divide-y-0 sm:p-2 sm:space-y-3">
@@ -1296,7 +1350,7 @@ export default function App() {
                         onSelectUser={handleOpenUserProfile}
                         onLikeToggle={handleLikeToggle}
                         onSaveToggle={handleSaveToggle}
-                        onOpenComments={(p) => setActiveCommentPost(p)}
+                        onOpenComments={(p) => handleOpenComments(p)}
                         onQuickComment={handleAddComment}
                         onDeletePost={handleDeletePost}
                         onBlockUser={handleBlockUser}
@@ -1315,8 +1369,8 @@ export default function App() {
               currentUser={currentUser}
               followingList={followingList}
               onFollowToggle={handleFollowToggle}
-              onSelectPost={(p) => setSelectedDetailPost(p)}
-              onSelectUser={(u) => setSelectedUserProfile(u)}
+              onSelectPost={(p) => handleOpenDetailPost(p)}
+              onSelectUser={(u) => handleOpenUserProfile(u)}
               onOpenDirect={handleOpenDirect}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
@@ -1326,7 +1380,7 @@ export default function App() {
             <UploadView
               currentUser={currentUser}
               onPostCreated={handleCreatePost}
-              onCancel={() => handleTabChange('home')}
+              onCancel={handleBack}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
           )}
@@ -1345,11 +1399,11 @@ export default function App() {
               savedPosts={savedPostsList}
               followingList={followingList}
               onFollowToggle={handleFollowToggle}
-              onSelectUser={(u) => setSelectedUserProfile(u)}
+              onSelectUser={(u) => handleOpenUserProfile(u)}
               onUpdateAvatar={handleUpdateAvatar}
               onRemoveAvatar={handleRemoveAvatar}
               onUpdateProfile={handleUpdateProfile}
-              onSelectPost={(p) => setSelectedDetailPost(p)}
+              onSelectPost={(p) => handleOpenDetailPost(p)}
               onOpenUpload={() => handleTabChange('upload')}
               onRequireLogin={() => setIsLoginModalOpen(true)}
             />
@@ -1369,7 +1423,7 @@ export default function App() {
               <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
                 <h3 className="text-base font-bold text-white">Settings & Activity</h3>
                 <button
-                  onClick={() => setIsMenuOpen(false)}
+                  onClick={handleBack}
                   className="text-zinc-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
@@ -1458,7 +1512,7 @@ export default function App() {
                   <h3 className="text-lg font-bold text-white">Get More Coins</h3>
                 </div>
                 <button
-                  onClick={() => setIsCoinModalOpen(false)}
+                  onClick={handleBack}
                   className="text-zinc-400 hover:text-white"
                 >
                   <X className="w-5 h-5" />
@@ -1469,7 +1523,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     setCoinsBalance(c => c + 100);
-                    setIsCoinModalOpen(false);
+                    handleBack();
                     alert('Successfully added 100 Coins!');
                   }}
                   className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
@@ -1481,7 +1535,7 @@ export default function App() {
                 <button
                   onClick={() => {
                     setCoinsBalance(c => c + 550);
-                    setIsCoinModalOpen(false);
+                    handleBack();
                     alert('Successfully added 550 Coins!');
                   }}
                   className="p-4 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-center transition-all"
@@ -1500,10 +1554,10 @@ export default function App() {
             stories={visibleStories}
             initialIndex={activeStoryIndex}
             currentUser={currentUser}
-            onClose={() => setActiveStoryIndex(null)}
+            onClose={handleBack}
             onStorySeen={handleStorySeen}
             onDeleteStory={handleDeleteStory}
-            onOpenDirectChat={() => setIsDirectModalOpen(true)}
+            onOpenDirectChat={() => handleOpenDirect()}
             onOpenChatroom={handleOpenVoiceChatroomFromStory}
           />
         )}
@@ -1513,7 +1567,7 @@ export default function App() {
             room={activeVoiceRoom}
             currentUser={currentUser}
             isOpen={isVoiceRoomModalOpen}
-            onMinimize={() => setIsVoiceRoomModalOpen(false)}
+            onMinimize={handleBack}
             onLeaveRoom={handleLeaveVoiceRoom}
             onUpdateRoom={handleUpdateVoiceRoom}
             onDeleteRoom={handleDeleteVoiceRoom}
@@ -1524,7 +1578,7 @@ export default function App() {
         {isCreateVoiceRoomOpen && (
           <CreateVoiceRoomModal
             isOpen={isCreateVoiceRoomOpen}
-            onClose={() => setIsCreateVoiceRoomOpen(false)}
+            onClose={handleBack}
             currentUser={currentUser}
             onCreateRoom={handleCreateVoiceRoom}
           />
@@ -1535,11 +1589,11 @@ export default function App() {
             isOpen={isVoiceRoomsListOpen}
             rooms={voiceRooms}
             currentUser={currentUser}
-            onClose={() => setIsVoiceRoomsListOpen(false)}
+            onClose={handleBack}
             onJoinRoom={handleJoinVoiceRoom}
             onOpenCreateRoom={() => {
               setIsVoiceRoomsListOpen(false);
-              setIsCreateVoiceRoomOpen(true);
+              handleOpenCreateVoiceRoom();
             }}
             onDeleteRoom={handleDeleteVoiceRoom}
           />
@@ -1549,7 +1603,10 @@ export default function App() {
           <VoiceRoomMiniPlayer
             room={activeVoiceRoom}
             currentUser={currentUser}
-            onExpand={() => setIsVoiceRoomModalOpen(true)}
+            onExpand={() => {
+              setIsVoiceRoomModalOpen(true);
+              pushNav({ voiceRoomId: activeVoiceRoom.id });
+            }}
             onLeave={handleLeaveVoiceRoom}
             onUpdateRoom={handleUpdateVoiceRoom}
           />
@@ -1559,7 +1616,7 @@ export default function App() {
           <CommentsModal
             post={activeCommentPost}
             currentUser={currentUser}
-            onClose={() => setActiveCommentPost(null)}
+            onClose={handleBack}
             onAddComment={handleAddComment}
             onDeleteComment={handleDeleteComment}
           />
@@ -1569,10 +1626,10 @@ export default function App() {
           <PostDetailModal
             post={selectedDetailPost}
             currentUser={currentUser}
-            onClose={() => setSelectedDetailPost(null)}
+            onClose={handleBack}
             onLikeToggle={handleLikeToggle}
             onSaveToggle={handleSaveToggle}
-            onOpenComments={(p) => setActiveCommentPost(p)}
+            onOpenComments={(p) => handleOpenComments(p)}
             onQuickComment={handleAddComment}
             onDeletePost={handleDeletePost}
             onBlockUser={handleBlockUser}
@@ -1596,19 +1653,16 @@ export default function App() {
               setSelectedUserProfile(null);
             }}
             onBlockUser={handleBlockUser}
-            onSelectPost={(p) => setSelectedDetailPost(p)}
-            onClose={() => setSelectedUserProfile(null)}
+            onSelectPost={(p) => handleOpenDetailPost(p)}
+            onClose={handleBack}
             onRequireLogin={() => setIsLoginModalOpen(true)}
           />
         )}
 
         <DirectMessagesModal
           isOpen={isDirectModalOpen}
-          onClose={() => {
-            setIsDirectModalOpen(false);
-            setDirectTargetUsername(null);
-            setDirectTargetUser(null);
-          }}
+          onClose={handleBack}
+          onBack={handleBack}
           currentUser={currentUser}
           initialTargetUsername={directTargetUsername}
           initialTargetUser={directTargetUser}
@@ -1616,18 +1670,21 @@ export default function App() {
 
         <NotificationsModal
           isOpen={isNotificationsOpen}
-          onClose={() => setIsNotificationsOpen(false)}
+          onClose={handleBack}
           currentUser={currentUser}
           onSelectUser={(u) => {
-            setIsNotificationsOpen(false);
-            handleOpenUserProfile(u);
+            handleBack();
+            setTimeout(() => handleOpenUserProfile(u), 60);
           }}
         />
 
         <LoginModal
           isOpen={isLoginModalOpen}
-          onClose={() => setIsLoginModalOpen(false)}
-          onLoginSuccess={(user) => setCurrentUser(user)}
+          onClose={handleBack}
+          onLoginSuccess={(user) => {
+            setCurrentUser(user);
+            handleBack();
+          }}
         />
       </div>
     </div>

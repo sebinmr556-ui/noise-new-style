@@ -16,10 +16,104 @@ import {
   Loader2,
   AlertCircle,
   RefreshCw,
-  ShieldAlert
+  ShieldAlert,
+  Flame,
+  TrendingUp,
+  Tag,
+  ArrowUpRight
 } from 'lucide-react';
 import { Post, AppUser, PublicUserProfile } from '../types';
 import { searchRegisteredUsers, getSuggestedDatabaseUsers } from '../utils/userSearch';
+
+export interface TrendingTopic {
+  id: string;
+  rank: number;
+  tag: string;
+  name: string;
+  category: string;
+  postCount: string;
+  growth: string;
+  isHot?: boolean;
+}
+
+export const POPULAR_HASHTAGS: TrendingTopic[] = [
+  {
+    id: '1',
+    rank: 1,
+    tag: '#NoiseVibes',
+    name: 'Noise Vibes',
+    category: 'Community',
+    postCount: '52.4K',
+    growth: '+48%',
+    isHot: true,
+  },
+  {
+    id: '2',
+    rank: 2,
+    tag: '#StreetPhotography',
+    name: 'Street Photography',
+    category: 'Photography',
+    postCount: '38.1K',
+    growth: '+32%',
+    isHot: true,
+  },
+  {
+    id: '3',
+    rank: 3,
+    tag: '#LofiBeats',
+    name: 'Lo-Fi Beats',
+    category: 'Music & Audio',
+    postCount: '29.7K',
+    growth: '+61%',
+    isHot: true,
+  },
+  {
+    id: '4',
+    rank: 4,
+    tag: '#GoldenHour',
+    name: 'Golden Hour',
+    category: 'Visual Art',
+    postCount: '24.5K',
+    growth: '+19%',
+  },
+  {
+    id: '5',
+    rank: 5,
+    tag: '#CyberpunkAesthetic',
+    name: 'Cyberpunk Aesthetic',
+    category: 'Digital Art',
+    postCount: '19.8K',
+    growth: '+27%',
+    isHot: true,
+  },
+  {
+    id: '6',
+    rank: 6,
+    tag: '#VintageFilm',
+    name: 'Vintage 35mm',
+    category: 'Retro Film',
+    postCount: '16.3K',
+    growth: '+14%',
+  },
+  {
+    id: '7',
+    rank: 7,
+    tag: '#TokyoNights',
+    name: 'Tokyo Nights',
+    category: 'Travel & Mood',
+    postCount: '14.9K',
+    growth: '+35%',
+  },
+  {
+    id: '8',
+    rank: 8,
+    tag: '#IndieCreators',
+    name: 'Indie Creators',
+    category: 'Community',
+    postCount: '11.8K',
+    growth: '+22%',
+  },
+];
 
 interface ExploreViewProps {
   allPosts: Post[];
@@ -56,6 +150,7 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'accounts' | 'posts'>('all');
   const [selectedTag, setSelectedTag] = useState('All');
+  const [selectedTopic, setSelectedTopic] = useState<TrendingTopic | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Real Database Users State
@@ -193,16 +288,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         post.caption.toLowerCase().includes(selectedTag.toLowerCase()) ||
         post.filter?.toLowerCase() === selectedTag.toLowerCase();
 
-      if (!query) return tagMatch;
+      const topicMatch =
+        !selectedTopic ||
+        post.caption.toLowerCase().includes(selectedTopic.tag.toLowerCase()) ||
+        post.caption.toLowerCase().includes(selectedTopic.tag.replace('#', '').toLowerCase()) ||
+        post.caption.toLowerCase().includes(selectedTopic.name.toLowerCase()) ||
+        (post.filter && post.filter.toLowerCase().includes(selectedTopic.name.toLowerCase()));
+
+      if (!query) return tagMatch && topicMatch;
 
       return (
         tagMatch &&
+        topicMatch &&
         (post.caption.toLowerCase().includes(query) ||
           post.username.toLowerCase().includes(query) ||
           (post.location && post.location.toLowerCase().includes(query)))
       );
     }).sort((a, b) => (b.likes || 0) - (a.likes || 0));
-  }, [allPosts, searchQuery, selectedTag]);
+  }, [allPosts, searchQuery, selectedTag, selectedTopic]);
 
   return (
     <div className="bg-zinc-950 text-zinc-100 min-h-[calc(100vh-110px)] pb-24">
@@ -501,6 +604,148 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
       {/* SECTION 2: EXPLORE POSTS GRID */}
       {activeTab !== 'accounts' && (
         <div className="mt-2">
+          {/* Trending Topics & Popular Tags Section (displayed when not searching or when viewing feed) */}
+          {!searchQuery && (
+            <div className="mb-4 pt-1">
+              {/* Section Header */}
+              <div className="px-3.5 flex items-center justify-between mb-2.5">
+                <div className="flex items-center gap-1.5">
+                  <div className="p-1 rounded-lg bg-gradient-to-tr from-amber-500/20 to-rose-500/20 border border-amber-500/30">
+                    <Flame className="w-3.5 h-3.5 text-amber-400 fill-amber-400/40" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-zinc-200 tracking-wide flex items-center gap-1.5">
+                      Trending Topics
+                      <span className="text-[10px] font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-1.5 py-0.2 rounded-full">
+                        Popular Tags
+                      </span>
+                    </h3>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] text-zinc-500">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <span className="text-[10px] font-mono text-zinc-400">Live Pulse</span>
+                </div>
+              </div>
+
+              {/* Horizontal Scroll of Trending Topic Cards */}
+              <div className="flex items-stretch gap-2.5 overflow-x-auto no-scrollbar px-3 pb-1">
+                {POPULAR_HASHTAGS.map((topic) => {
+                  const isSelected = selectedTopic?.id === topic.id;
+                  return (
+                    <button
+                      key={topic.id}
+                      onClick={() => setSelectedTopic(isSelected ? null : topic)}
+                      type="button"
+                      className={`flex-none w-[168px] text-left p-3 rounded-2xl border transition-all cursor-pointer relative group ${
+                        isSelected
+                          ? 'bg-gradient-to-b from-purple-950/60 to-zinc-900 border-purple-500/80 ring-1 ring-purple-500/50 shadow-lg shadow-purple-950/40'
+                          : 'bg-zinc-900/80 hover:bg-zinc-900 border-zinc-800 hover:border-zinc-700/80 shadow-xs'
+                      }`}
+                    >
+                      {/* Top Row: Rank & Hot Badge */}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-mono font-bold text-zinc-400 group-hover:text-zinc-300">
+                          #{topic.rank}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {topic.isHot && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
+                              <Flame className="w-2.5 h-2.5 fill-amber-400" />
+                              HOT
+                            </span>
+                          )}
+                          <span className="text-[9px] text-zinc-500 group-hover:text-zinc-400 truncate max-w-[70px]">
+                            {topic.category}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Tag Name */}
+                      <p className={`text-xs font-bold truncate transition-colors ${
+                        isSelected ? 'text-purple-300' : 'text-zinc-100 group-hover:text-purple-300'
+                      }`}>
+                        {topic.tag}
+                      </p>
+                      <p className="text-[10px] text-zinc-400 truncate mt-0.5">
+                        {topic.name}
+                      </p>
+
+                      {/* Bottom Row: Posts count & Growth */}
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-800/60 text-[10px]">
+                        <span className="text-zinc-400 font-medium">
+                          {topic.postCount}
+                        </span>
+                        <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
+                          <TrendingUp className="w-2.5 h-2.5" />
+                          {topic.growth}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Popular Tags Quick Chips */}
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar px-3 pt-2">
+                <div className="flex items-center gap-1 text-[10px] uppercase font-bold text-zinc-500 flex-none pr-1">
+                  <Tag className="w-3 h-3 text-zinc-500" />
+                  <span>Tags:</span>
+                </div>
+                {POPULAR_HASHTAGS.map((topic) => {
+                  const isSelected = selectedTopic?.id === topic.id;
+                  return (
+                    <button
+                      key={`chip-${topic.id}`}
+                      onClick={() => setSelectedTopic(isSelected ? null : topic)}
+                      type="button"
+                      className={`flex-none text-[11px] px-2.5 py-0.5 rounded-lg transition-all cursor-pointer flex items-center gap-1 ${
+                        isSelected
+                          ? 'bg-purple-600 text-white font-semibold shadow-xs'
+                          : 'bg-zinc-900 hover:bg-zinc-850 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                      }`}
+                    >
+                      <span>{topic.tag}</span>
+                      <span className="text-[9px] text-zinc-500 opacity-80">{topic.postCount}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Active Filter Bar if a topic is selected */}
+          {selectedTopic && (
+            <div className="mx-3 mb-3 p-2.5 bg-gradient-to-r from-purple-950/40 to-indigo-950/30 border border-purple-500/30 rounded-xl flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="p-1 rounded-md bg-purple-500/20 text-purple-300 flex-none">
+                  <Tag className="w-3.5 h-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-white truncate">{selectedTopic.tag}</span>
+                    <span className="text-[10px] text-purple-300 font-medium">({selectedTopic.postCount} posts)</span>
+                  </div>
+                  <p className="text-[10px] text-zinc-400 truncate">
+                    Showing content matching topic "{selectedTopic.name}"
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTopic(null)}
+                className="px-2 py-1 rounded-lg bg-zinc-800/80 hover:bg-zinc-750 text-zinc-300 hover:text-white flex items-center gap-1 text-[11px] font-medium transition-colors cursor-pointer flex-none"
+                type="button"
+                title="Clear topic filter"
+              >
+                <X className="w-3 h-3" />
+                <span>Reset</span>
+              </button>
+            </div>
+          )}
+
           {searchQuery && activeTab === 'all' && (
             <div className="px-4 py-1.5 flex items-center gap-1.5 text-xs font-bold text-zinc-400 uppercase tracking-wider">
               <Hash className="w-3.5 h-3.5 text-zinc-500" />
@@ -562,7 +807,24 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
             </div>
           ) : (
             <div className="text-center py-16 px-4 text-zinc-500 text-xs">
-              {searchQuery ? (
+              {selectedTopic ? (
+                <div className="space-y-2 max-w-xs mx-auto">
+                  <div className="w-10 h-10 rounded-full bg-purple-950/40 border border-purple-500/30 flex items-center justify-center mx-auto text-purple-400">
+                    <Tag className="w-5 h-5" />
+                  </div>
+                  <p className="font-semibold text-zinc-200">No local posts tagged {selectedTopic.tag} yet</p>
+                  <p className="text-zinc-500 text-[11px]">
+                    This topic has {selectedTopic.postCount} global mentions! Create a post using {selectedTopic.tag} to be featured first.
+                  </p>
+                  <button
+                    onClick={() => setSelectedTopic(null)}
+                    className="mt-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-750 text-zinc-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                    type="button"
+                  >
+                    <span>Clear Tag Filter</span>
+                  </button>
+                </div>
+              ) : searchQuery ? (
                 <p>No posts matching "{searchQuery}".</p>
               ) : (
                 <div className="space-y-1">
