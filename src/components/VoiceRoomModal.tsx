@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Mic, MicOff, Hand, Users, MessageSquare, Share2, 
-  PhoneOff, Crown, ChevronDown, Send, Sparkles, Youtube, 
-  Play, StopCircle, Heart, Swords, Dices, Flame, Trophy, 
-  RotateCw, HelpCircle, Coins, Volume2, UserPlus, ArrowRight,
-  Trash2, Gift, Lock
+  X, Mic, MicOff, Hand, Users, Share2, 
+  ChevronDown, Send, Swords, 
+  Coins, UserPlus, Trash2, Gift, Lock, Palette, Check
 } from 'lucide-react';
-import { AppUser, VoiceRoom, RoomParticipant, RoomMessage, PKBattle, InteractiveGame } from '../types';
+import { AppUser, VoiceRoom, RoomParticipant, RoomMessage, PKBattle } from '../types';
 import { isGlobalAdmin } from '../utils/admin';
 import { 
   createMicAnalyser, 
@@ -15,14 +13,11 @@ import {
   playPopSound, 
   playClapSound, 
   playMicToggleSound, 
-  playGongSound,
-  playVictorySound,
-  playDiceRollSound
+  playVictorySound
 } from '../utils/audioVibeEngine';
 import {
   setActiveVoiceRoomStream,
   setLocalMediaTrackMuted,
-  isLocalMediaTrackMuted,
   stopActiveVoiceRoomStream,
   subscribeToMediaTrackChanges,
 } from '../utils/voiceRoomMedia';
@@ -31,8 +26,7 @@ import {
   collection, 
   addDoc, 
   onSnapshot, 
-  serverTimestamp, 
-  query 
+  serverTimestamp 
 } from 'firebase/firestore';
 
 interface VoiceRoomModalProps {
@@ -62,43 +56,43 @@ interface GiftItem {
 }
 
 const LUXURY_GIFTS: GiftItem[] = [
-  { id: 'heart', name: 'Love Heart', icon: '💖', coins: 1, category: 'Hot' },
-  { id: 'rose', name: 'Velvet Rose', icon: '🌹', coins: 5, category: 'Hot' },
-  { id: 'star', name: 'Golden Star', icon: '⭐', coins: 25, category: 'Hot' },
-  { id: 'kiss', name: 'Sweet Kiss', icon: '💋', coins: 50, category: 'Hot' },
-  { id: 'ring', name: 'Love Ring', icon: '💍', coins: 199, category: '3D' },
-  { id: 'cocktail', name: 'Champagne', icon: '🥂', coins: 500, category: 'Classic' },
-  { id: 'supercar', name: 'Cyber Car', icon: '🏎️', coins: 2500, category: '3D' },
-  { id: 'crown', name: 'Imperial Crown', icon: '👑', coins: 5000, category: 'VIP' },
+  { id: 'heart', name: 'Lit Heart', icon: '💖', coins: 1, category: 'Hot' },
+  { id: 'rose', name: 'Rose', icon: '🌹', coins: 5, category: 'Hot' },
+  { id: 'star', name: 'Star', icon: '⭐', coins: 25, category: 'Hot' },
+  { id: 'kiss', name: 'Kiss', icon: '💋', coins: 120, category: 'Hot' },
+  { id: 'ring', name: 'Love Ring', icon: '💍', coins: 1100, category: '3D' },
+  { id: 'cocktail', name: 'Zoma Chat', icon: '🍹', coins: 2500, category: 'Classic' },
+  { id: 'dog', name: 'Dog Singing', icon: '🐶', coins: 2500, category: 'Classic' },
+  { id: 'piggy', name: 'Piggy', icon: '🐷', coins: 750, category: 'Hot' },
+  { id: 'supercar', name: 'Cyber Car', icon: '🏎️', coins: 15000, category: '3D' },
+  { id: 'crown', name: 'Golden Crown', icon: '👑', coins: 20000, category: 'VIP' },
 ];
 
-const REACTION_EMOJIS = ['❤️', '🔥', '👏', '🎉', '✨', '💎'];
-
-const WHEEL_ITEMS = [
-  { text: 'Sing 15s 🎤', color: '#ec4899' },
-  { text: 'Secret 🤫', color: '#8b5cf6' },
-  { text: '+50 Likes ❤️', color: '#f43f5e' },
-  { text: 'Lion Roar 🦁', color: '#f59e0b' },
-  { text: 'Pass Mic 👑', color: '#10b981' },
-  { text: 'Imitate Voice 🎭', color: '#06b6d4' },
-  { text: 'Hot Take 🔥', color: '#ef4444' },
-  { text: 'Free Pass ⭐', color: '#6366f1' },
-];
-
-const TRUTH_PROMPTS = [
-  'What is the most embarrassing song in your playlist?',
-  'What is a secret talent that almost nobody here knows about?',
-  'Who in this room has the most soothing speaking voice?',
-  'What is the wildest thing you have ever bought on impulse?',
-  'What is your biggest fear or strange phobia?'
-];
-
-const DARE_PROMPTS = [
-  'Sing the chorus of your favorite song in opera style!',
-  'Do a dramatic 15-second movie villain monologue!',
-  'Speak in an exaggerated accent for your next 3 sentences!',
-  'Tell a terrible dad joke with a completely straight face!',
-  'Make the sound of a sports car revving up at full throttle!'
+const LUXURY_THEMES = [
+  {
+    id: 'supercar',
+    name: 'Cyber Supercar',
+    image: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
+    cost: 15000
+  },
+  {
+    id: 'crescent_palace',
+    name: 'Crescent Palace',
+    image: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=800&q=80',
+    cost: 15000
+  },
+  {
+    id: 'golden_phoenix',
+    name: 'Golden Phoenix',
+    image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80',
+    cost: 15000
+  },
+  {
+    id: 'fantasy_portal',
+    name: 'Fantasy Portal',
+    image: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=800&q=80',
+    cost: 15000
+  }
 ];
 
 export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
@@ -118,12 +112,14 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
   const [isMuted, setIsMuted] = useState(false);
   const [hasRaisedHand, setHasRaisedHand] = useState(false);
-  const [localVolume, setLocalVolume] = useState(0);
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState<RoomMessage[]>([]);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
-  const [copiedLink, setCopiedLink] = useState(false);
+
+  // Active Wallpaper Theme
+  const [currentTheme, setCurrentTheme] = useState(LUXURY_THEMES[0]);
+  const [showThemeModal, setShowThemeModal] = useState(false);
 
   // Gifting System
   const [showGiftModal, setShowGiftModal] = useState(false);
@@ -131,46 +127,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [selectedGift, setSelectedGift] = useState<GiftItem>(LUXURY_GIFTS[0]);
   const [userCoins, setUserCoins] = useState(2510);
   const [flyingGift, setFlyingGift] = useState<string | null>(null);
-
-  // Real-Time Voice Room Chat Sync via Firestore
-  useEffect(() => {
-    if (!isFirebaseConfigured || !db || !room?.id) return;
-
-    const msgsCol = collection(db, 'voice_rooms', room.id, 'messages');
-    const unsubscribe = onSnapshot(
-      msgsCol,
-      (snapshot) => {
-        const loaded: RoomMessage[] = [];
-        snapshot.forEach((docSnap) => {
-          const d = docSnap.data();
-          loaded.push({
-            id: docSnap.id,
-            uid: d.uid || 'user',
-            username: d.username || 'User',
-            displayName: d.displayName || d.username || 'User',
-            avatar: d.avatar || '',
-            text: d.text || '',
-            createdAt: d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt || Date.now()),
-          });
-        });
-
-        loaded.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
-        setMessages(loaded);
-      },
-      (err) => {
-        console.debug('Voice room messages listener error:', err);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [room?.id]);
-
-  // Slot Likes state (8 slots)
-  const [slotLikes, setSlotLikes] = useState<{ [slotIdx: number]: number }>(() => room.slotLikes || {});
-  const [pulsingSlot, setPulsingSlot] = useState<number | null>(null);
-
-  // Center Modes: 'idle' | 'pk' | 'games'
-  const [centerMode, setCenterMode] = useState<'idle' | 'pk' | 'games'>('pk');
 
   // PK Battle State
   const [pkBattle, setPkBattle] = useState<PKBattle | null>({
@@ -193,51 +149,51 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     duration: 60,
     winner: null,
   });
-  const [comboMultiplier, setComboMultiplier] = useState(1);
-  const [pkWinnerModal, setPkWinnerModal] = useState<'red' | 'blue' | 'draw' | null>(null);
 
-  // Interactive Games State
-  const [activeGameTab, setActiveGameTab] = useState<'wheel' | 'dice' | 'truthOrDare' | 'coinFlip'>('wheel');
-  const [wheelRotation, setWheelRotation] = useState(0);
-  const [isSpinningWheel, setIsSpinningWheel] = useState(false);
-  const [wheelResult, setWheelResult] = useState<string | null>(null);
-
-  const [diceValues, setDiceValues] = useState<[number, number]>([3, 4]);
-  const [isRollingDice, setIsRollingDice] = useState(false);
-
-  const [currentPrompt, setCurrentPrompt] = useState<{ type: 'truth' | 'dare'; text: string }>({
-    type: 'truth',
-    text: TRUTH_PROMPTS[0],
-  });
-
-  const [coinFlipping, setCoinFlipping] = useState(false);
-  const [coinSide, setCoinSide] = useState<'heads' | 'tails'>('heads');
-
-  // YouTube Background Player
-  const [showYtPlayer, setShowYtPlayer] = useState(false);
-  const [ytInput, setYtInput] = useState('');
-  const [ytVideoId, setYtVideoId] = useState<string | null>(null);
-
-  // Audience list sheet
   const [showAudienceSheet, setShowAudienceSheet] = useState(false);
-
-  // WebRTC
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const micHandleRef = useRef<MicAnalyserHandle | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   const isSpeaker = isHost || room.speakers.some((s) => s.uid === currentUser?.uid);
 
-  // 8 Seater Grid Layout (Poppo / Yalla Live Style)
-  const slots: (RoomParticipant | null)[] = Array.from({ length: 8 }, (_, i) => {
-    if (i === 0) {
-      return room.speakers.find((s) => s.uid === room.hostUid) || room.speakers[0] || null;
-    }
+  // Seat Slots 3 to 10 (Total 8 bottom slots, matching reference)
+  const bottomSlots: (RoomParticipant | null)[] = Array.from({ length: 8 }, (_, i) => {
     const otherSpeakers = room.speakers.filter((s) => s.uid !== room.hostUid);
-    return otherSpeakers[i - 1] || null;
+    return otherSpeakers[i + 1] || null;
   });
 
-  // Microphone and Audio analysis
+  // Real-Time Messages
+  useEffect(() => {
+    if (!isFirebaseConfigured || !db || !room?.id) return;
+
+    const msgsCol = collection(db, 'voice_rooms', room.id, 'messages');
+    const unsubscribe = onSnapshot(
+      msgsCol,
+      (snapshot) => {
+        const loaded: RoomMessage[] = [];
+        snapshot.forEach((docSnap) => {
+          const d = docSnap.data();
+          loaded.push({
+            id: docSnap.id,
+            uid: d.uid || 'user',
+            username: d.username || 'User',
+            displayName: d.displayName || d.username || 'User',
+            avatar: d.avatar || '',
+            text: d.text || '',
+            createdAt: d.createdAt?.toMillis ? d.createdAt.toMillis() : (d.createdAt || Date.now()),
+          });
+        });
+        loaded.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+        setMessages(loaded);
+      },
+      (err) => console.debug('Voice room messages listener error:', err)
+    );
+
+    return () => unsubscribe();
+  }, [room?.id]);
+
+  // Audio Stream Setup
   useEffect(() => {
     if (isSpeaker && !localStream) {
       navigator.mediaDevices.getUserMedia({ audio: true, video: false })
@@ -250,7 +206,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               handle.setMuted(isMuted);
               const checkVolume = () => {
                 const vol = handle.getVolumeLevel();
-                setLocalVolume(vol);
                 setIsSpeakingLocally(!isMuted && vol > 12);
                 requestAnimationFrame(checkVolume);
               };
@@ -268,25 +223,8 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   }, [isSpeaker]);
 
   useEffect(() => {
-    const unsubscribe = subscribeToMediaTrackChanges((muted) => {
-      setIsMuted(muted);
-    });
-
-    const handleMicSignal = (e: CustomEvent<boolean | { isMuted: boolean }>) => {
-      const nextMuted = typeof e.detail === 'boolean' ? e.detail : e.detail?.isMuted;
-      if (typeof nextMuted === 'boolean') {
-        setIsMuted(nextMuted);
-      }
-    };
-
-    window.addEventListener('mute-hardware-mic', handleMicSignal as EventListener);
-    window.addEventListener('voice-room-mic-status', handleMicSignal as EventListener);
-
-    return () => {
-      unsubscribe();
-      window.removeEventListener('mute-hardware-mic', handleMicSignal as EventListener);
-      window.removeEventListener('voice-room-mic-status', handleMicSignal as EventListener);
-    };
+    const unsubscribe = subscribeToMediaTrackChanges((muted) => setIsMuted(muted));
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -296,29 +234,22 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     if (micHandleRef.current) micHandleRef.current.setMuted(isMuted);
   }, [isMuted, localStream]);
 
-  // PK Battle Countdown Timer
+  // PK Timer
   useEffect(() => {
     if (!pkBattle?.isActive) return;
-
     const timer = setInterval(() => {
       setPkBattle((prev) => {
         if (!prev || !prev.isActive) return null;
         if (prev.timeLeft <= 1) {
           playVictorySound();
-          let winner: 'red' | 'blue' | 'draw' = 'draw';
-          if (prev.teamRed.score > prev.teamBlue.score) winner = 'red';
-          else if (prev.teamBlue.score > prev.teamRed.score) winner = 'blue';
-          setPkWinnerModal(winner);
-          return { ...prev, timeLeft: 0, isActive: false, winner };
+          return { ...prev, timeLeft: 0, isActive: false };
         }
         return { ...prev, timeLeft: prev.timeLeft - 1 };
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [pkBattle?.isActive]);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -327,14 +258,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     const nextState = !isMuted;
     setIsMuted(nextState);
     playMicToggleSound(!nextState);
-
     setLocalMediaTrackMuted(nextState);
-    if (localStream) {
-      localStream.getAudioTracks().forEach((t) => { t.enabled = !nextState; });
-    }
-    if (micHandleRef.current) {
-      micHandleRef.current.setMuted(nextState);
-    }
 
     if (currentUser) {
       const updated = room.speakers.map((s) => s.uid === currentUser.uid ? { ...s, isMuted: nextState } : s);
@@ -347,12 +271,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     const nextState = !hasRaisedHand;
     setHasRaisedHand(nextState);
     if (nextState) playChimeSound();
-    const updated = room.listeners.map((l) => l.uid === currentUser.uid ? { ...l, hasRaisedHand: nextState } : l);
-    onUpdateRoom({ ...room, listeners: updated });
   };
 
   const handleSendReaction = (emoji: string) => {
-    emoji === '👏' ? playClapSound() : playPopSound();
+    playPopSound();
     const newReaction: FloatingReaction = {
       id: `react-${Date.now()}-${Math.random()}`,
       emoji,
@@ -366,10 +288,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   };
 
   const handleTakeSeat = (slotIdx: number) => {
-    if (!currentUser) {
-      onRequireLogin();
-      return;
-    }
+    if (!currentUser) return onRequireLogin();
     if (isSpeaker) return;
 
     playChimeSound();
@@ -382,68 +301,14 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       isMuted: false,
       isSpeaking: false,
       joinedAt: Date.now(),
-      seatNumber: slotIdx,
+      seatNumber: slotIdx + 3,
     };
 
-    const remainingListeners = room.listeners.filter((l) => l.uid !== currentUser.uid);
-    const updatedSpeakers = [...room.speakers, newSpeaker];
     onUpdateRoom({
       ...room,
-      speakers: updatedSpeakers,
-      listeners: remainingListeners,
+      speakers: [...room.speakers, newSpeaker],
+      listeners: room.listeners.filter((l) => l.uid !== currentUser.uid),
     });
-  };
-
-  const handleStartPkBattle = () => {
-    playGongSound();
-    setPkBattle({
-      isActive: true,
-      teamRed: {
-        uid: room.hostUid,
-        username: room.hostUsername,
-        displayName: room.hostDisplayName,
-        avatar: room.hostAvatar,
-        score: 100,
-      },
-      teamBlue: {
-        uid: 'challenger-1',
-        username: 'King Jr',
-        displayName: 'King Jr',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&h=120&fit=crop',
-        score: 100,
-      },
-      timeLeft: 60,
-      duration: 60,
-      winner: null,
-    });
-    setCenterMode('pk');
-  };
-
-  const handleBoostTeam = (team: 'red' | 'blue') => {
-    playPopSound();
-    const addScore = 50 * comboMultiplier;
-    setComboMultiplier((prev) => Math.min(prev + 1, 10));
-
-    setTimeout(() => {
-      setComboMultiplier(1);
-    }, 2000);
-
-    setPkBattle((prev) => {
-      if (!prev) return null;
-      if (team === 'red') {
-        return {
-          ...prev,
-          teamRed: { ...prev.teamRed, score: prev.teamRed.score + addScore },
-        };
-      } else {
-        return {
-          ...prev,
-          teamBlue: { ...prev.teamBlue, score: prev.teamBlue.score + addScore },
-        };
-      }
-    });
-
-    handleSendReaction(team === 'red' ? '❤️' : '💙');
   };
 
   const handleSendGift = () => {
@@ -451,19 +316,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       alert('Not enough coins! Please Top Up.');
       return;
     }
-
     playChimeSound();
     setUserCoins((prev) => prev - selectedGift.coins);
     setFlyingGift(selectedGift.icon);
-
-    if (pkBattle?.isActive) {
-      handleBoostTeam('red');
-    }
-
-    setTimeout(() => {
-      setFlyingGift(null);
-    }, 2500);
-
+    setTimeout(() => setFlyingGift(null), 2500);
     setShowGiftModal(false);
   };
 
@@ -471,10 +327,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     e.preventDefault();
     const text = chatInput.trim();
     if (!text) return;
-    if (!currentUser) {
-      onRequireLogin();
-      return;
-    }
+    if (!currentUser) return onRequireLogin();
 
     setChatInput('');
     playPopSound();
@@ -490,71 +343,62 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           createdAt: serverTimestamp(),
         });
       } catch (err) {
-        console.error('Failed to post voice room message:', err);
+        console.error('Failed to post message:', err);
       }
-    } else {
-      const newMsg: RoomMessage = {
-        id: `msg-${Date.now()}`,
-        uid: currentUser.uid,
-        username: currentUser.username,
-        avatar: currentUser.photoURL,
-        text: text,
-        createdAt: Date.now(),
-      };
-      setMessages((prev) => [...prev, newMsg]);
     }
   };
 
   const handleShareRoom = () => {
     navigator.clipboard?.writeText(window.location.href);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
+    playPopSound();
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-3xl select-none ${!isOpen ? 'hidden' : 'animate-fadeIn'}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-3xl select-none">
       
-      {/* Flying Reactions */}
+      {/* Floating Reactions */}
       <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
         {floatingReactions.map((r) => (
           <div
             key={r.id}
             style={{ left: `${r.xPercent}%`, top: `${r.yPercent}%` }}
-            className="absolute text-4xl animate-float-reaction"
+            className="absolute text-4xl animate-bounce"
           >
             {r.emoji}
           </div>
         ))}
       </div>
 
-      {/* Main Screen Container (Mobile frame styling) */}
-      <div className="w-full h-full max-w-[430px] relative flex flex-col bg-black sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/30 shadow-[0_0_80px_rgba(245,158,11,0.2)] overflow-hidden">
+      {/* Main Container */}
+      <div className="w-full h-full max-w-[430px] relative flex flex-col bg-black sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/40 shadow-[0_0_100px_rgba(245,158,11,0.25)] overflow-hidden">
         
         {/* ========================================================= */}
-        {/* LUXURY SUPERCAR & GOLDEN GLOW BACKGROUND                  */}
+        {/* 🔥 LIVE DYNAMIC STAGE WALLPAPER                           */}
         {/* ========================================================= */}
-        <div className="absolute inset-0 z-0 pointer-events-none">
-          <div className="absolute inset-0 bg-gradient-to-b from-amber-950/40 via-purple-950/40 to-black z-10" />
-          <div className="absolute top-12 left-1/2 -translate-x-1/2 w-72 h-72 bg-amber-500/20 blur-[100px] rounded-full" />
-          <div className="absolute bottom-36 left-1/2 -translate-x-1/2 w-80 h-80 bg-rose-600/15 blur-[110px] rounded-full" />
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          {/* Top Stage Spotlight */}
+          <div className="absolute top-0 inset-x-0 h-96 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-400/40 via-amber-700/20 to-transparent z-10" />
 
-          {/* Supercar Neon Contour Effect */}
-          <div className="absolute top-36 inset-x-0 flex justify-center opacity-40 scale-105">
-            <svg viewBox="0 0 400 240" className="w-full max-w-sm text-amber-500 stroke-current fill-none stroke-[1.4]">
-              <path d="M 60 170 C 100 130, 150 110, 200 110 C 250 110, 300 130, 340 170 L 360 200 L 40 200 Z" opacity="0.5" />
-              <path d="M 130 110 L 165 60 L 235 60 L 270 110 Z" opacity="0.8" />
-              <line x1="165" y1="85" x2="235" y2="85" stroke="yellow" strokeWidth="2" />
-            </svg>
-          </div>
+          {/* Active Wallpaper Image */}
+          <img 
+            src={currentTheme.image} 
+            alt={currentTheme.name} 
+            className="w-full h-full object-cover object-center brightness-95 contrast-125 scale-105 transition-all duration-700"
+          />
+
+          {/* Vignette Shades */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/20 to-black z-10" />
+          <div className="absolute bottom-28 inset-x-0 h-80 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
         </div>
 
         {/* ========================================================= */}
-        {/* TOP STATUS BAR                                            */}
+        {/* 1. TOP STATUS CAPSULE                                     */}
         {/* ========================================================= */}
-        <div className="pt-3 px-3.5 pb-2 flex items-center justify-between z-30">
-          {/* Host Info Capsule */}
-          <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-amber-500/30 rounded-full py-1 pl-1 pr-3">
-            <div className="relative w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-yellow-400 to-amber-600">
+        <div className="pt-3 px-3.5 pb-1 flex items-center justify-between z-30">
+          <div className="flex items-center gap-2 bg-black/60 backdrop-blur-md border border-amber-400/40 rounded-full py-1 pl-1 pr-3 shadow-lg">
+            <div className="relative w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-yellow-300 to-amber-600">
               <img 
                 src={room.hostAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop"} 
                 alt="host" 
@@ -564,7 +408,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </div>
             <div className="flex flex-col">
               <span className="text-xs font-black text-amber-200 leading-tight truncate max-w-[85px]">
-                {room.title || 'VIP Party'}
+                {room.title || 'Zoma Team'}
               </span>
               <span className="text-[10px] text-amber-400 font-bold flex items-center gap-0.5">
                 💎 {userCoins}
@@ -572,47 +416,49 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </div>
             <button 
               onClick={() => setShowGiftModal(true)}
-              className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-black flex items-center justify-center font-black text-xs ml-1 shadow-xs"
+              className="w-5 h-5 rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 text-black flex items-center justify-center font-black text-xs ml-1 shadow-sm"
             >
               +
             </button>
           </div>
 
-          {/* Action Icons */}
           <div className="flex items-center gap-1.5">
+            {/* Theme Switcher Button */}
+            <button 
+              onClick={() => setShowThemeModal(true)}
+              className="w-7 h-7 bg-black/60 border border-amber-400/40 rounded-full text-amber-300 flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-transform"
+              title="Change Stage Theme"
+            >
+              <Palette className="w-3.5 h-3.5" />
+            </button>
+
             {/* Audience Count */}
             <button 
-              onClick={() => setShowAudienceSheet(true)}
-              className="flex items-center gap-1 bg-black/50 px-2 py-1 rounded-full border border-white/10 text-[10px] font-bold text-amber-300"
+              onClick={() => setShowAudienceSheet(!showAudienceSheet)}
+              className="flex items-center gap-1 bg-black/60 px-2 py-1 rounded-full border border-white/15 text-[10px] font-bold text-amber-300"
             >
-              <Users className="w-3 h-3 text-amber-400" />
+              <Users className="w-3.5 h-3.5 text-amber-400" />
               <span>{room.listeners.length + room.speakers.length}</span>
             </button>
 
-            {/* Minimize */}
             <button
               onClick={onMinimize}
-              className="w-7 h-7 bg-white/5 border border-white/10 rounded-full text-white flex items-center justify-center hover:bg-white/10"
-              title="Minimize"
+              className="w-7 h-7 bg-black/60 border border-white/15 rounded-full text-white flex items-center justify-center"
             >
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
-            {/* Share */}
             <button
               onClick={handleShareRoom}
-              className="w-7 h-7 bg-white/5 border border-white/10 rounded-full text-white flex items-center justify-center hover:bg-white/10"
-              title="Share"
+              className="w-7 h-7 bg-black/60 border border-white/15 rounded-full text-white flex items-center justify-center"
             >
               <Share2 className="w-3.5 h-3.5" />
             </button>
 
-            {/* End Room */}
             {canDeleteRoom && (
               <button
                 onClick={() => setShowDeleteRoomModal(true)}
-                className="w-7 h-7 bg-rose-500/20 border border-rose-500/40 rounded-full text-rose-400 flex items-center justify-center hover:bg-rose-500 hover:text-white"
-                title="End Room"
+                className="w-7 h-7 bg-rose-500/20 border border-rose-500/40 rounded-full text-rose-400 flex items-center justify-center"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -621,115 +467,112 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* PK BATTLE & STAGE TOP DUEL (Exact reference match)         */}
+        {/* 2. TOP PK PODIUM (Winged Golden Crown & Phoenix Crest)     */}
         {/* ========================================================= */}
-        <div className="relative z-20 px-4 py-1 flex items-center justify-center gap-6">
-          {/* Host / Team Red */}
+        <div className="relative z-20 px-4 pt-2 pb-1 flex items-center justify-center gap-8">
+          {/* Seat 1: Host */}
           <div className="flex flex-col items-center">
             <div className="relative">
-              <div className="w-16 h-16 rounded-full p-1 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 shadow-lg shadow-amber-500/30">
+              <div className="w-[72px] h-[72px] rounded-full p-1 bg-gradient-to-b from-yellow-300 via-amber-500 to-yellow-600 shadow-[0_0_25px_rgba(245,158,11,0.6)]">
                 <img 
                   src={room.hostAvatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&h=150&fit=crop"} 
                   alt="Rank 1" 
                   className="w-full h-full rounded-full object-cover" 
                 />
               </div>
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 to-yellow-500 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-md flex items-center gap-0.5 whitespace-nowrap">
-                👑 1st Host
+
+              {/* Winged Golden Crown Badge */}
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-yellow-200 whitespace-nowrap">
+                👑 1 Host
               </div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-end gap-0.5 bg-black/80 px-1.5 py-0.5 rounded-full border border-amber-500/50">
+
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-end gap-0.5 bg-black/90 px-2 py-0.5 rounded-full border border-amber-400/60 shadow-md">
                 <span className="w-0.5 h-2 bg-amber-400 rounded-full animate-bounce" />
                 <span className="w-0.5 h-3 bg-yellow-300 rounded-full animate-bounce [animation-delay:150ms]" />
                 <span className="w-0.5 h-2 bg-amber-400 rounded-full animate-bounce [animation-delay:300ms]" />
               </div>
             </div>
             <span className="text-xs font-bold text-amber-200 mt-2">@{room.hostUsername}</span>
-            <span className="text-[10px] text-amber-400 font-extrabold">💎 2.5K</span>
+            <span className="text-[11px] text-amber-400 font-extrabold">💎 2.5K</span>
           </div>
 
-          {/* VS PK Badge */}
+          {/* PK Versus Badge */}
           <div className="flex flex-col items-center justify-center">
-            <div 
-              onClick={handleStartPkBattle}
-              className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-rose-600 flex items-center justify-center shadow-lg shadow-rose-900/60 border border-yellow-300/40 cursor-pointer active:scale-95 transition-transform"
-            >
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 via-rose-500 to-rose-600 flex items-center justify-center shadow-[0_0_18px_rgba(244,63,94,0.7)] border border-yellow-300/60">
               <Swords className="w-4 h-4 text-white stroke-[2.5]" />
             </div>
-            <span className="text-[10px] font-black text-rose-400 tracking-wider mt-1">
+            <span className="text-[10px] font-black text-rose-400 tracking-wider mt-1 bg-black/60 px-2 py-0.5 rounded-full border border-rose-500/30">
               {pkBattle?.isActive ? `00:${pkBattle.timeLeft.toString().padStart(2, '0')}` : 'VS'}
             </span>
           </div>
 
-          {/* Challenger / Team Blue */}
+          {/* Seat 2: Challenger */}
           <div className="flex flex-col items-center">
             <div className="relative">
-              <div className="w-16 h-16 rounded-full p-1 bg-gradient-to-b from-rose-500 via-purple-600 to-amber-600 shadow-lg shadow-rose-500/30">
+              <div className="w-[72px] h-[72px] rounded-full p-1 bg-gradient-to-b from-rose-500 via-purple-600 to-amber-600 shadow-[0_0_25px_rgba(244,63,94,0.6)]">
                 <img 
                   src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop" 
                   alt="Rank 2" 
                   className="w-full h-full rounded-full object-cover" 
                 />
               </div>
-              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-zinc-300 to-zinc-400 text-black text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-md flex items-center gap-0.5 whitespace-nowrap">
-                ⚔️ 2nd King
+
+              {/* Phoenix Badge */}
+              <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-red-500 via-rose-400 to-amber-500 text-white text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-rose-300 whitespace-nowrap">
+                🦅 2 King Jr
               </div>
-              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-end gap-0.5 bg-black/80 px-1.5 py-0.5 rounded-full border border-rose-500/50">
+
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-end gap-0.5 bg-black/90 px-2 py-0.5 rounded-full border border-rose-500/60 shadow-md">
                 <span className="w-0.5 h-2 bg-rose-400 rounded-full animate-bounce" />
                 <span className="w-0.5 h-3 bg-rose-300 rounded-full animate-bounce [animation-delay:200ms]" />
               </div>
             </div>
             <span className="text-xs font-bold text-zinc-200 mt-2">King Jr</span>
-            <span className="text-[10px] text-rose-400 font-extrabold">💎 1.8K</span>
+            <span className="text-[11px] text-rose-400 font-extrabold">💎 1.8K</span>
           </div>
         </div>
 
         {/* ========================================================= */}
-        {/* 8-SEATER MIC STAGE GRID (Poppo / Yalla Live Style)         */}
+        {/* 3. 8 MIC SEATS (Seats 3 to 10 arranged over Supercar Hood) */}
         {/* ========================================================= */}
-        <div className="relative z-20 flex-1 px-5 py-2 flex flex-col justify-center">
-          <div className="grid grid-cols-4 gap-y-3 gap-x-2 max-w-sm mx-auto w-full">
-            {slots.map((seat, index) => {
-              const seatNum = index + 1;
+        <div className="relative z-20 flex-1 px-4 py-2 flex flex-col justify-center">
+          <div className="grid grid-cols-4 gap-y-4 gap-x-2 max-w-sm mx-auto w-full">
+            {bottomSlots.map((seat, index) => {
+              const seatNum = index + 3; // Seats 3 to 10
               const isOccupied = Boolean(seat);
-              const isLocalUser = seat?.uid === currentUser?.uid;
-              const isLocked = index === 3 || index === 7;
+              const isLocked = seatNum === 4 || seatNum === 6 || seatNum === 10;
 
               return (
-                <div key={index} className="flex flex-col items-center">
-                  <div className="relative w-12 h-12">
+                <div key={seatNum} className="flex flex-col items-center">
+                  <div className="relative w-14 h-14">
                     {isOccupied && seat ? (
-                      <div className="w-12 h-12 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-rose-500 to-yellow-500 shadow-md">
+                      <div className="w-14 h-14 rounded-full p-0.5 bg-gradient-to-tr from-amber-400 via-rose-500 to-yellow-400 shadow-[0_0_15px_rgba(245,158,11,0.4)]">
                         <img 
                           src={seat.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(seat.username)}`} 
                           alt={seat.username} 
                           className="w-full h-full rounded-full object-cover"
                         />
-                        {seat.isSpeaking && (
-                          <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-black flex items-center justify-center">
-                            <Mic className="w-2.5 h-2.5 text-black" />
-                          </span>
-                        )}
                       </div>
                     ) : isLocked ? (
-                      <div className="w-12 h-12 rounded-full bg-zinc-950/70 border border-zinc-800 flex items-center justify-center text-zinc-600">
-                        <Lock className="w-4 h-4 text-zinc-500" />
+                      <div className="w-14 h-14 rounded-full bg-black/75 border border-zinc-700/80 flex items-center justify-center text-zinc-400 shadow-inner">
+                        <Lock className="w-5 h-5 text-zinc-400" />
                       </div>
                     ) : (
                       <button 
                         onClick={() => handleTakeSeat(index)}
-                        className="w-12 h-12 rounded-full bg-zinc-900/60 border border-dashed border-amber-500/40 flex items-center justify-center text-amber-400 hover:border-amber-400 active:scale-95 transition-all"
+                        className="w-14 h-14 rounded-full bg-black/60 border-2 border-dashed border-amber-400/60 flex items-center justify-center text-amber-300 hover:border-amber-300 hover:scale-105 active:scale-95 transition-all shadow-md group"
                       >
-                        <UserPlus className="w-4 h-4" />
+                        <UserPlus className="w-5 h-5 group-hover:scale-110 transition-transform" />
                       </button>
                     )}
                     
-                    {/* Seat Number Tag */}
-                    <span className="absolute -bottom-1 inset-x-0 mx-auto w-fit text-[8px] font-black text-amber-300 bg-black/80 px-1 rounded-full border border-amber-500/30">
+                    {/* Glowing Seat Tag */}
+                    <span className="absolute -bottom-1.5 inset-x-0 mx-auto w-fit text-[9px] font-black text-amber-200 bg-black/90 px-1.5 py-0.2 rounded-full border border-amber-400/50 shadow-md">
                       {seatNum}
                     </span>
                   </div>
 
-                  <span className="text-[10px] text-zinc-400 font-medium mt-1.5 truncate max-w-[55px]">
+                  <span className="text-[11px] text-zinc-300 font-semibold mt-2 truncate max-w-[62px]">
                     {isOccupied && seat ? seat.username : `Seat ${seatNum}`}
                   </span>
                 </div>
@@ -739,23 +582,23 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* FLOATING LIVE CHAT                                        */}
+        {/* 4. ANNOUNCEMENT & FLOATING CHAT                           */}
         {/* ========================================================= */}
-        <div className="relative z-20 px-4 py-1 h-32 flex flex-col justify-end pointer-events-none">
-          <div className="overflow-y-auto space-y-1.5 max-h-32 no-scrollbar pointer-events-auto">
+        <div className="relative z-20 px-3.5 py-1 h-36 flex flex-col justify-end pointer-events-none">
+          <div className="overflow-y-auto space-y-1.5 max-h-36 pointer-events-auto">
             {/* Announcement Banner */}
-            <div className="bg-amber-950/40 border border-amber-500/30 backdrop-blur-md rounded-xl p-2 text-[11px] text-amber-200 shadow-sm max-w-[85%]">
+            <div className="bg-amber-950/70 border border-amber-500/40 backdrop-blur-md rounded-2xl p-2.5 text-[11px] text-amber-200 shadow-lg max-w-[90%]">
               <span className="font-black text-amber-400 block uppercase tracking-wider text-[9px] mb-0.5">
-                📢 Announcement
+                📢 Announcement :
               </span>
-              The owner entered the room. Send gifts to level up!
+              The owner @raihan entered the room. Send gifts to level up!
             </div>
 
-            {/* Chat Messages */}
+            {/* Chat Bubbles */}
             {messages.map((m) => (
               <div 
                 key={m.id}
-                className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl px-3 py-1.5 text-xs text-white max-w-[85%] w-fit shadow-md flex items-center gap-1.5"
+                className="bg-black/70 backdrop-blur-md border border-white/15 rounded-2xl px-3 py-1.5 text-xs text-white max-w-[85%] w-fit shadow-md flex items-center gap-1.5"
               >
                 <span className="font-extrabold text-amber-400 text-[11px]">
                   @{m.username}:
@@ -768,36 +611,33 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* BOTTOM ACTION BAR (MESSAGE INPUT + LUXURY GIFT BUTTON)    */}
+        {/* 5. BOTTOM CONTROL BAR                                     */}
         {/* ========================================================= */}
-        <div className="relative z-20 px-3 py-2.5 bg-gradient-to-t from-black via-zinc-950 to-transparent flex items-center gap-2">
-          {/* Reaction Tray Button */}
+        <div className="relative z-20 px-3 py-3 bg-gradient-to-t from-black via-zinc-950 to-transparent flex items-center gap-2">
           <button 
             onClick={() => handleSendReaction('❤️')}
-            className="w-9 h-9 rounded-full bg-zinc-900/90 border border-white/10 flex items-center justify-center text-rose-500 hover:scale-105 active:scale-95 transition-transform"
+            className="w-10 h-10 rounded-full bg-zinc-900/90 border border-white/10 flex items-center justify-center text-rose-500 hover:scale-105 active:scale-95 transition-transform"
           >
             ❤️
           </button>
 
-          {/* Message Input Box */}
           <form onSubmit={handleSendMessage} className="flex-1 relative flex items-center">
             <input 
               type="text"
               value={chatInput}
               onChange={(e) => setChatInput(e.target.value)}
               placeholder="Message here..."
-              className="w-full bg-zinc-900/90 border border-amber-500/30 rounded-full pl-3.5 pr-8 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 transition-all shadow-inner"
+              className="w-full bg-zinc-900/90 border border-amber-500/40 rounded-full pl-4 pr-9 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-amber-400 transition-all shadow-inner"
             />
-            <button type="submit" className="absolute right-2 text-amber-400 hover:text-amber-300">
-              <Send className="w-3.5 h-3.5" />
+            <button type="submit" className="absolute right-3 text-amber-400 hover:text-amber-300">
+              <Send className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Mic Toggle Button */}
           {isSpeaker ? (
             <button 
               onClick={handleToggleMediaTrack}
-              className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                 isMuted 
                   ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' 
                   : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400'
@@ -808,7 +648,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           ) : (
             <button 
               onClick={toggleHandRaise}
-              className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
                 hasRaisedHand 
                   ? 'bg-amber-500 border-amber-400 text-black' 
                   : 'bg-zinc-900/90 border-white/10 text-zinc-300'
@@ -818,10 +658,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </button>
           )}
 
-          {/* 🌟 3D GLOWING GIFT BUTTON */}
+          {/* 🌟 3D Gifting Button */}
           <button 
             onClick={() => setShowGiftModal(true)}
-            className="relative w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-400 via-rose-500 to-purple-600 p-[1.5px] shadow-lg shadow-amber-500/30 hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
+            className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-400 via-rose-500 to-purple-600 p-[2px] shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
           >
             <div className="w-full h-full bg-zinc-950 rounded-2xl flex items-center justify-center">
               <Gift className="w-5 h-5 text-yellow-300 animate-pulse" />
@@ -831,32 +671,35 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         </div>
 
         {/* ========================================================= */}
-        {/* FLYING GIFT ANIMATION OVERLAY                             */}
+        {/* 6. FLYING GIFT ANIMATION OVERLAY                          */}
         {/* ========================================================= */}
         {flyingGift && (
           <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center animate-bounce">
             <div className="text-8xl drop-shadow-[0_10px_30px_rgba(255,215,0,0.8)] filter">
               {flyingGift}
             </div>
-            <div className="mt-4 px-4 py-1.5 rounded-full bg-black/80 border border-amber-400 text-amber-300 text-xs font-black tracking-widest uppercase shadow-2xl">
+            <div className="mt-4 px-4 py-1.5 rounded-full bg-black/85 border border-amber-400 text-amber-300 text-xs font-black tracking-widest uppercase shadow-2xl">
               ✨ LUXURY GIFT SENT! ✨
             </div>
           </div>
         )}
 
         {/* ========================================================= */}
-        {/* BOTTOM GIFT VAULT MODAL                                   */}
+        {/* 7. GIFT COIN DRAWER MODAL (Matches Left Screen in Photo)   */}
         {/* ========================================================= */}
         {showGiftModal && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
             <div 
-              className="w-full max-w-[430px] mx-auto bg-gradient-to-b from-zinc-900 to-black border-t-2 border-amber-500/50 rounded-t-3xl p-4 shadow-2xl flex flex-col max-h-[60vh]"
+              className="w-full max-w-[430px] mx-auto bg-gradient-to-b from-purple-950/90 via-zinc-950 to-black border-t-2 border-purple-500/50 rounded-t-3xl p-4 shadow-2xl flex flex-col max-h-[62vh]"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              {/* Drawer Purple Header Bar */}
+              <div className="flex items-center justify-between pb-3 border-b border-purple-800/40">
                 <div className="flex items-center gap-2">
-                  <Crown className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs font-black text-white uppercase tracking-wider">Gift Vault</span>
+                  <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-amber-400 to-yellow-500 flex items-center justify-center text-black text-xs font-bold">
+                    👑
+                  </div>
+                  <span className="text-xs font-black text-white uppercase tracking-wider">Gift Coin</span>
                 </div>
                 <button 
                   onClick={() => setShowGiftModal(false)}
@@ -866,15 +709,15 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 </button>
               </div>
 
-              {/* Gift Categories */}
-              <div className="flex items-center gap-4 py-2 border-b border-zinc-800/80 text-xs font-bold text-zinc-400">
+              {/* Category Filter Tabs */}
+              <div className="flex items-center gap-5 py-2.5 border-b border-zinc-800/80 text-xs font-bold text-zinc-400">
                 {(['Hot', 'Classic', '3D', 'VIP'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setSelectedGiftTab(tab)}
                     className={`pb-1 transition-all ${
                       selectedGiftTab === tab 
-                        ? 'text-amber-400 border-b-2 border-amber-400 font-black' 
+                        ? 'text-purple-400 border-b-2 border-purple-400 font-black' 
                         : 'hover:text-zinc-200'
                     }`}
                   >
@@ -883,17 +726,17 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 ))}
               </div>
 
-              {/* Gift Items Grid */}
-              <div className="grid grid-cols-4 gap-2.5 py-3 overflow-y-auto max-h-52 no-scrollbar">
+              {/* 8-Grid Gift Icons */}
+              <div className="grid grid-cols-4 gap-2.5 py-3 overflow-y-auto max-h-52">
                 {LUXURY_GIFTS.filter(g => selectedGiftTab === 'Hot' || g.category === selectedGiftTab).map((gift) => {
                   const isSelected = selectedGift.id === gift.id;
                   return (
                     <button
                       key={gift.id}
                       onClick={() => setSelectedGift(gift)}
-                      className={`p-2 rounded-2xl flex flex-col items-center justify-center border transition-all ${
+                      className={`p-2.5 rounded-2xl flex flex-col items-center justify-center border transition-all ${
                         isSelected
-                          ? 'bg-amber-500/20 border-amber-400 shadow-md shadow-amber-500/20 scale-105'
+                          ? 'bg-purple-600/30 border-purple-400 shadow-md shadow-purple-500/30 scale-105'
                           : 'bg-zinc-900/60 border-zinc-800/80 hover:border-zinc-700'
                       }`}
                     >
@@ -907,30 +750,98 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 })}
               </div>
 
-              {/* Balance & Send */}
-              <div className="pt-2 border-t border-zinc-800 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 bg-black/60 px-3 py-1.5 rounded-full border border-amber-500/30">
-                  <Coins className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="text-xs font-black text-amber-300">{userCoins}</span>
-                  <button className="text-[10px] font-bold text-yellow-400 underline ml-1">
+              {/* Bottom Wallet & Top Up */}
+              <div className="pt-2.5 border-t border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 bg-black/60 px-3 py-1.5 rounded-full border border-amber-500/30">
+                    <Coins className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="text-xs font-black text-amber-300">{userCoins}</span>
+                  </div>
+                  <button className="text-xs font-bold text-purple-400 underline">
                     Top Up
                   </button>
                 </div>
 
                 <button
                   onClick={handleSendGift}
-                  className="px-6 py-2 rounded-full font-black text-xs uppercase tracking-wider text-black bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500 shadow-lg shadow-amber-500/25 hover:brightness-110 active:scale-95 transition-all"
+                  className="px-6 py-2 rounded-full font-black text-xs uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-rose-500 to-amber-500 shadow-lg shadow-purple-600/30 hover:brightness-110 active:scale-95 transition-all"
                 >
-                  Send Gift
+                  Send
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Delete Room Confirmation Modal */}
+        {/* ========================================================= */}
+        {/* 8. THEME STORE MODAL (Matches Right Screen in Photo)       */}
+        {/* ========================================================= */}
+        {showThemeModal && (
+          <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
+            <div 
+              className="w-full max-w-[430px] mx-auto bg-gradient-to-b from-zinc-900 to-black border-t-2 border-amber-500/50 rounded-t-3xl p-4 shadow-2xl flex flex-col max-h-[75vh]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">Select your theme</h3>
+                <button 
+                  onClick={() => setShowThemeModal(false)}
+                  className="p-1 rounded-full text-zinc-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Theme Categories */}
+              <div className="flex items-center gap-3 py-3">
+                <button className="px-4 py-1 rounded-full text-xs font-bold bg-white/5 text-zinc-400">
+                  Gallery
+                </button>
+                <button className="px-4 py-1 rounded-full text-xs font-black bg-gradient-to-r from-purple-600 to-rose-500 text-white shadow-md">
+                  Premium
+                </button>
+                <button className="px-4 py-1 rounded-full text-xs font-bold bg-white/5 text-zinc-400">
+                  Customize
+                </button>
+              </div>
+
+              {/* Theme Grid */}
+              <div className="grid grid-cols-3 gap-2.5 py-2 overflow-y-auto max-h-72">
+                {LUXURY_THEMES.map((theme) => {
+                  const isSelected = currentTheme.id === theme.id;
+                  return (
+                    <div 
+                      key={theme.id}
+                      onClick={() => setCurrentTheme(theme)}
+                      className={`relative rounded-2xl overflow-hidden border-2 cursor-pointer transition-all ${
+                        isSelected ? 'border-amber-400 ring-2 ring-amber-400/50 scale-105' : 'border-zinc-800 opacity-80 hover:opacity-100'
+                      }`}
+                    >
+                      <img src={theme.image} alt={theme.name} className="w-full h-28 object-cover" />
+                      <div className="absolute inset-x-0 bottom-0 p-1.5 bg-black/80 backdrop-blur-sm flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-amber-300">🪙 {theme.cost}</span>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-amber-400 stroke-[3]" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800">
+                <button
+                  onClick={() => setShowThemeModal(false)}
+                  className="w-full py-3 rounded-full font-black text-xs uppercase tracking-wider text-white bg-gradient-to-r from-purple-600 via-rose-500 to-amber-500 shadow-xl shadow-purple-600/30 hover:brightness-110 active:scale-95 transition-all"
+                >
+                  Save Theme
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Room Modal */}
         {showDeleteRoomModal && (
-          <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
+          <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 text-center max-w-xs w-full shadow-2xl">
               <div className="w-11 h-11 rounded-full bg-rose-500/15 border border-rose-500/30 flex items-center justify-center mx-auto mb-3 text-rose-500">
                 <Trash2 className="w-5 h-5" />
@@ -943,7 +854,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowDeleteRoomModal(false)}
-                  className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white transition-colors"
+                  className="flex-1 py-2 rounded-xl text-xs font-semibold bg-zinc-800 text-zinc-300 hover:text-white"
                 >
                   Cancel
                 </button>
@@ -953,7 +864,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                     setShowDeleteRoomModal(false);
                     if (onDeleteRoom) onDeleteRoom(room.id);
                   }}
-                  className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white transition-colors shadow-lg"
+                  className="flex-1 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white shadow-lg"
                 >
                   End Room
                 </button>
