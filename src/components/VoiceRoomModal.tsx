@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Mic, MicOff, Hand, Users, Share2, 
   ChevronDown, Send, Swords, 
-  Coins, UserPlus, Trash2, Gift, Lock, Palette, Check
+  Coins, Trash2, Gift, Lock, Palette, Check
 } from 'lucide-react';
 import { AppUser, VoiceRoom, RoomParticipant, RoomMessage, PKBattle } from '../types';
 import { isGlobalAdmin } from '../utils/admin';
@@ -72,7 +72,6 @@ const LUXURY_THEMES = [
   {
     id: 'supercar',
     name: 'Cyber Supercar',
-    // Realistic Red & Gold glowing front hypercar
     image: 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=1000&q=80',
     cost: 15000
   },
@@ -363,23 +362,23 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       <div className="w-full h-full max-w-[430px] relative flex flex-col bg-zinc-950 sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/40 shadow-[0_0_100px_rgba(245,158,11,0.25)] overflow-hidden">
         
         {/* ========================================================= */}
-        {/* 🔥 REALISTIC SUPERCAR & GOLDEN STAGE SUNBURST BACKGROUND   */}
+        {/* 🔥 STAGE SUNBURST LIGHTING & SUPERCAR THEME               */}
         {/* ========================================================= */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-          {/* Top Golden Sunburst / Light Beams */}
-          <div className="absolute -top-10 inset-x-0 h-[420px] bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-amber-600/30 via-yellow-400/40 to-amber-600/30 blur-xl opacity-80 z-10" />
+          {/* Top Golden Sunburst / Beams */}
+          <div className="absolute -top-16 inset-x-0 h-[460px] bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-amber-500/35 via-yellow-400/45 to-amber-500/35 blur-2xl opacity-90 z-10" />
 
-          {/* Hypercar Visual */}
+          {/* Realistic Red/Gold Hypercar Visual */}
           <div className="absolute inset-0 z-0 flex items-center justify-center">
             <img 
               src={currentTheme.image} 
               alt={currentTheme.name} 
-              className="w-full h-full object-cover object-bottom brightness-90 contrast-125 scale-110"
+              className="w-full h-full object-cover object-bottom brightness-95 contrast-125 scale-110"
             />
           </div>
 
-          {/* Luxury Atmosphere Overlays */}
-          <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/30 to-black z-10" />
+          {/* Vignette Gradients */}
+          <div className="absolute inset-0 bg-gradient-to-b from-black/75 via-black/25 to-black z-10" />
           <div className="absolute bottom-28 inset-x-0 h-96 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
         </div>
 
@@ -470,7 +469,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                 />
               </div>
 
-              {/* Gold Crown Banner */}
+              {/* Gold Crown Badge */}
               <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-yellow-200 whitespace-nowrap">
                 👑 1 Host
               </div>
@@ -548,7 +547,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                         <Lock className="w-5 h-5 text-white/60" />
                       </div>
                     ) : (
-                      /* Solid Glassmorphic Add User (+) Button (Like in reference) */
+                      /* Solid Glassmorphic Add User (+) Button */
                       <button 
                         onClick={() => handleTakeSeat(index)}
                         className="w-14 h-14 rounded-full bg-white/10 backdrop-blur-md border border-white/20 hover:border-amber-400/80 hover:bg-white/15 flex items-center justify-center text-white/80 hover:text-amber-300 hover:scale-105 active:scale-95 transition-all shadow-lg group"
