@@ -46,7 +46,7 @@ import { CreateVoiceRoomModal } from './components/CreateVoiceRoomModal';
 import { VoiceRoomsListModal } from './components/VoiceRoomsListModal';
 import { TopLoadingBar } from './components/TopLoadingBar';
 import { PullToRefresh } from './components/PullToRefresh';
-import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock, Radio, MessageCircle, Heart, Crown, CreditCard, Sparkles } from 'lucide-react';
+import { Loader2, Menu, Coins, Shield, HelpCircle, LogOut, X, Lock, Radio, MessageCircle, Heart, Crown } from 'lucide-react';
 
 const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -136,7 +136,6 @@ export default function App() {
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isPrivateAccount, setIsPrivateAccount] = useState(false);
 
-  // VIP Checker logic
   const currentHandle = (currentUser?.username || '').toLowerCase().replace('@', '');
   const isVipUnlimitedUser = UNLIMITED_COIN_USERS.includes(currentHandle);
 
@@ -259,72 +258,59 @@ export default function App() {
     }
   };
 
-  const hasAnyModalOpen = () => {
-    return (
-      selectedDetailPost !== null ||
-      selectedUserProfile !== null ||
-      isDirectModalOpen ||
-      isNotificationsOpen ||
-      activeStoryIndex !== null ||
-      activeCommentPost !== null ||
-      isVoiceRoomsListOpen ||
-      isCreateVoiceRoomOpen ||
-      isVoiceRoomModalOpen ||
-      isMenuOpen ||
-      isCoinModalOpen ||
-      isLoginModalOpen
-    );
-  };
-
+  // 🎯 STEP-BY-STEP BACK HANDLER (Home -> Chatroom List -> Chatroom -> Chatroom List -> Home)
   const handleBack = () => {
-    if (stepCountRef.current > 0 || (window.history.state && typeof window.history.state.stepIndex === 'number' && window.history.state.stepIndex > 0)) {
+    if (isCoinModalOpen) {
+      setIsCoinModalOpen(false);
+      pushNav({ isCoinModalOpen: false }, true);
+    } else if (isMenuOpen) {
+      setIsMenuOpen(false);
+      pushNav({ isMenuOpen: false }, true);
+    } else if (isLoginModalOpen) {
+      setIsLoginModalOpen(false);
+      pushNav({ isLoginModalOpen: false }, true);
+    } else if (activeCommentPost) {
+      setActiveCommentPost(null);
+      pushNav({ activeCommentPostId: null }, true);
+    } else if (selectedDetailPost) {
+      setSelectedDetailPost(null);
+      pushNav({ detailPostId: null }, true);
+    } else if (selectedUserProfile) {
+      setSelectedUserProfile(null);
+      pushNav({ userProfileUsername: null, userProfileUid: null }, true);
+    } else if (isDirectModalOpen) {
+      setIsDirectModalOpen(false);
+      setDirectTargetUsername(null);
+      setDirectTargetUser(null);
+      pushNav({ isDirectOpen: false, directContactId: null, directContactUsername: null }, true);
+    } else if (isNotificationsOpen) {
+      setIsNotificationsOpen(false);
+      pushNav({ isNotificationsOpen: false }, true);
+    } else if (activeStoryIndex !== null) {
+      setActiveStoryIndex(null);
+      pushNav({ storyIndex: null }, true);
+    } 
+    // 🔥 1. Chatroom ninnu back adichaal Chatroom List-lekku maathram povaan:
+    else if (isVoiceRoomModalOpen) {
+      setIsVoiceRoomModalOpen(false);
+      setIsVoiceRoomsListOpen(true);
+      pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
+    } 
+    // 🔥 2. Chatroom List ninnu back adichaal Home-lekku povaan:
+    else if (isVoiceRoomsListOpen) {
+      setIsVoiceRoomsListOpen(false);
+      pushNav({ isVoiceRoomsListOpen: false }, true);
+    } else if (isCreateVoiceRoomOpen) {
+      setIsCreateVoiceRoomOpen(false);
+      setIsVoiceRoomsListOpen(true);
+      pushNav({ isCreateVoiceRoomOpen: false, isVoiceRoomsListOpen: true });
+    } else if (activeTab !== 'home') {
+      handleTabChange('home');
+    } else if (stepCountRef.current > 0 || (window.history.state && typeof window.history.state.stepIndex === 'number' && window.history.state.stepIndex > 0)) {
       window.history.back();
-    } else {
-      if (isCoinModalOpen) {
-        setIsCoinModalOpen(false);
-        pushNav({ isCoinModalOpen: false }, true);
-      } else if (isMenuOpen) {
-        setIsMenuOpen(false);
-        pushNav({ isMenuOpen: false }, true);
-      } else if (isLoginModalOpen) {
-        setIsLoginModalOpen(false);
-        pushNav({ isLoginModalOpen: false }, true);
-      } else if (activeCommentPost) {
-        setActiveCommentPost(null);
-        pushNav({ activeCommentPostId: null }, true);
-      } else if (selectedDetailPost) {
-        setSelectedDetailPost(null);
-        pushNav({ detailPostId: null }, true);
-      } else if (selectedUserProfile) {
-        setSelectedUserProfile(null);
-        pushNav({ userProfileUsername: null, userProfileUid: null }, true);
-      } else if (isDirectModalOpen) {
-        setIsDirectModalOpen(false);
-        setDirectTargetUsername(null);
-        setDirectTargetUser(null);
-        pushNav({ isDirectOpen: false, directContactId: null, directContactUsername: null }, true);
-      } else if (isNotificationsOpen) {
-        setIsNotificationsOpen(false);
-        pushNav({ isNotificationsOpen: false }, true);
-      } else if (activeStoryIndex !== null) {
-        setActiveStoryIndex(null);
-        pushNav({ storyIndex: null }, true);
-      } else if (isVoiceRoomModalOpen) {
-        setIsVoiceRoomModalOpen(false);
-        pushNav({ voiceRoomId: null }, true);
-      } else if (isVoiceRoomsListOpen) {
-        setIsVoiceRoomsListOpen(false);
-        pushNav({ isVoiceRoomsListOpen: false }, true);
-      } else if (isCreateVoiceRoomOpen) {
-        setIsCreateVoiceRoomOpen(false);
-        pushNav({ isCreateVoiceRoomOpen: false }, true);
-      } else if (activeTab !== 'home') {
-        handleTabChange('home');
-      }
     }
   };
 
-  // 🪙 Coin Purchase and VIP Grant Handler
   const handlePurchaseCoins = async (coinsToAdd: number, price: number) => {
     if (!currentUser) {
       setIsLoginModalOpen(true);
@@ -332,7 +318,6 @@ export default function App() {
     }
 
     if (isVipUnlimitedUser) {
-      // Free unlimited refill for @sebin_mr & @nora_____noraaa
       const updatedBalance = coinsBalance + coinsToAdd;
       setCoinsBalance(updatedBalance);
       localStorage.setItem('noise_coins_balance', updatedBalance.toString());
@@ -351,7 +336,6 @@ export default function App() {
       return;
     }
 
-    // Normal Users Payment Protection
     alert(`💳 Checkout Gateway: To add ${coinsToAdd.toLocaleString()} Coins, please complete payment of $${price.toFixed(2)}. Direct unlimited grant is restricted to VIP accounts.`);
   };
 
@@ -453,18 +437,23 @@ export default function App() {
         setActiveCommentPost(null);
       }
 
-      setIsVoiceRoomsListOpen(!!state.isVoiceRoomsListOpen);
-      setIsCreateVoiceRoomOpen(!!state.isCreateVoiceRoomOpen);
+      // Step-by-step restoration of voice rooms
       if (state.voiceRoomId) {
         const found = voiceRooms.find((r) => r.id === state.voiceRoomId);
         if (found) {
           setActiveVoiceRoom(found);
           setIsVoiceRoomModalOpen(true);
+          setIsVoiceRoomsListOpen(false);
         }
+      } else if (state.isVoiceRoomsListOpen) {
+        setIsVoiceRoomModalOpen(false);
+        setIsVoiceRoomsListOpen(true);
       } else {
         setIsVoiceRoomModalOpen(false);
+        setIsVoiceRoomsListOpen(false);
       }
 
+      setIsCreateVoiceRoomOpen(!!state.isCreateVoiceRoomOpen);
       setIsMenuOpen(!!state.isMenuOpen);
       setIsCoinModalOpen(!!state.isCoinModalOpen);
       setIsLoginModalOpen(!!state.isLoginModalOpen);
@@ -494,6 +483,7 @@ export default function App() {
     } catch {}
   }, [posts]);
 
+  // Auth Listener with permanent Firestore profile sync (Name/Username persist)
   useEffect(() => {
     if (!isFirebaseConfigured || !auth) return;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -502,10 +492,11 @@ export default function App() {
         let displayName = user.displayName || 'Noise Creator';
         let username = (user.displayName || 'user').toLowerCase().replace(/[^a-z0-9_]/g, '_').slice(0, 15);
         let photoURL = user.photoURL || '';
-        let bio = 'Digital Creator ✨Noise App Official 🚀';
+        let bio = 'Digital Creator ✨\nNoise App Official 🚀';
         let website = '';
         let followersCount = 0;
         let followingCount = 0;
+        let coins = 150;
 
         if (db) {
           try {
@@ -520,10 +511,7 @@ export default function App() {
               if (typeof data.followersCount === 'number') followersCount = data.followersCount;
               if (typeof data.followingCount === 'number') followingCount = data.followingCount;
               if (Array.isArray(data.blockedUsers)) blockedUsers = data.blockedUsers;
-              if (typeof data.coins === 'number') {
-                setCoinsBalance(data.coins);
-                localStorage.setItem('noise_coins_balance', data.coins.toString());
-              }
+              if (typeof data.coins === 'number') coins = data.coins;
             } else {
               await syncUserToDatabase({
                 uid: user.uid,
@@ -555,8 +543,10 @@ export default function App() {
           blockedUsers: Array.from(new Set([...blockedUsers]))
         };
         setCurrentUser(appUser);
+        setCoinsBalance(coins);
         try {
           localStorage.setItem('noise_current_user', JSON.stringify(appUser));
+          localStorage.setItem('noise_coins_balance', coins.toString());
         } catch {}
       }
     });
@@ -902,6 +892,7 @@ export default function App() {
     setIsDirectModalOpen(true);
   };
 
+  // 🔥 DIRECT FIRESTORE UPDATE FOR USERNAME AND NAME
   const handleUpdateProfile = async (updates: Partial<AppUser>) => {
     if (!currentUser) return;
     const updated = { ...currentUser, ...updates };
@@ -909,6 +900,18 @@ export default function App() {
     try {
       localStorage.setItem('noise_current_user', JSON.stringify(updated));
     } catch {}
+
+    if (isFirebaseConfigured && db) {
+      try {
+        await updateDoc(doc(db, 'users', currentUser.uid), {
+          ...updates,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (e) {
+        console.debug('Error updating profile in firestore:', e);
+      }
+    }
+
     await syncUserToDatabase({ uid: currentUser.uid, username: currentUser.username, ...updates });
   };
 
@@ -1092,6 +1095,7 @@ export default function App() {
       isMuted: false,
       isSpeaking: false,
       joinedAt: Date.now(),
+      seatNumber: 1,
     };
     const newRoom: VoiceRoom = {
       id: `room-${Date.now()}`,
@@ -1112,16 +1116,23 @@ export default function App() {
     setVoiceRooms(prev => [newRoom, ...prev]);
     setActiveVoiceRoom(newRoom);
     setIsVoiceRoomModalOpen(true);
+    setIsVoiceRoomsListOpen(false);
+    pushNav({ voiceRoomId: newRoom.id, isVoiceRoomsListOpen: false });
   };
 
+  // 🔥 Chatroom List-ൽ നിന്ന് റൂമിൽ കയറുമ്പോൾ:
   const handleJoinVoiceRoom = (room: VoiceRoom) => {
+    setIsVoiceRoomsListOpen(false);
     setActiveVoiceRoom(room);
     setIsVoiceRoomModalOpen(true);
+    pushNav({ isVoiceRoomsListOpen: false, voiceRoomId: room.id });
   };
 
   const handleLeaveVoiceRoom = () => {
     setActiveVoiceRoom(null);
     setIsVoiceRoomModalOpen(false);
+    setIsVoiceRoomsListOpen(true);
+    pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
   };
 
   const handleDeleteVoiceRoom = async (roomId: string) => {
@@ -1129,6 +1140,8 @@ export default function App() {
     if (activeVoiceRoom?.id === roomId) {
       setActiveVoiceRoom(null);
       setIsVoiceRoomModalOpen(false);
+      setIsVoiceRoomsListOpen(true);
+      pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
     }
   };
 
@@ -1150,7 +1163,7 @@ export default function App() {
       }
     }
     if (voiceRooms.length > 0) {
-      setIsVoiceRoomsListOpen(true);
+      handleOpenVoiceRoomsList();
     } else {
       if (!currentUser) {
         setIsLoginModalOpen(true);
@@ -1285,12 +1298,13 @@ export default function App() {
               onClick={() => {
                 if (activeVoiceRoom) {
                   setIsVoiceRoomModalOpen(true);
-                  pushNav({ voiceRoomId: activeVoiceRoom.id });
+                  setIsVoiceRoomsListOpen(false);
+                  pushNav({ voiceRoomId: activeVoiceRoom.id, isVoiceRoomsListOpen: false });
                 } else {
                   handleOpenVoiceRoomsList();
                 }
               }}
-              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group flex items-center active:scale-95"
+              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group flex items-center active:scale-95 cursor-pointer"
               type="button"
               title="Chatrooms & Voice Rooms"
             >
@@ -1305,7 +1319,7 @@ export default function App() {
 
             <button
               onClick={handleOpenNotifications}
-              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95"
+              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all relative group active:scale-95 cursor-pointer"
               type="button"
               title="Notifications"
             >
@@ -1315,7 +1329,7 @@ export default function App() {
 
             <button
               onClick={() => handleOpenDirect()}
-              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95"
+              className="relative p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all group active:scale-95 cursor-pointer"
               type="button"
               title="Direct Messages & Inbox"
             >
@@ -1324,7 +1338,7 @@ export default function App() {
 
             <button
               onClick={handleOpenMenu}
-              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all"
+              className="p-2 rounded-full text-zinc-300 hover:text-white hover:bg-zinc-900/90 transition-all cursor-pointer"
               type="button"
             >
               <Menu className="w-5 h-5" />
@@ -1366,7 +1380,7 @@ export default function App() {
                       </p>
                       <button
                         onClick={() => handleTabChange('upload')}
-                        className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all"
+                        className="mt-4 px-5 py-2.5 bg-gradient-to-r from-rose-500 via-purple-600 to-indigo-600 hover:opacity-90 text-white text-xs font-bold rounded-xl shadow-lg transition-all cursor-pointer"
                       >
                         Create First Post
                       </button>
@@ -1458,7 +1472,7 @@ export default function App() {
                 <h3 className="text-base font-bold text-white">Settings & Activity</h3>
                 <button
                   onClick={handleBack}
-                  className="text-zinc-400 hover:text-white"
+                  className="text-zinc-400 hover:text-white cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -1470,7 +1484,7 @@ export default function App() {
                     setIsMenuOpen(false);
                     setIsCoinModalOpen(true);
                   }}
-                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left ${
+                  className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left cursor-pointer ${
                     isVipUnlimitedUser
                       ? 'bg-amber-500/15 border border-amber-400/40 hover:bg-amber-500/25'
                       : 'bg-zinc-800/50 hover:bg-zinc-800'
@@ -1508,7 +1522,7 @@ export default function App() {
                     setIsMenuOpen(false);
                     handleTabChange('profile');
                   }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium cursor-pointer"
                 >
                   <Shield className="w-5 h-5 text-purple-400" />
                   <span>Profile Settings & Security</span>
@@ -1518,7 +1532,7 @@ export default function App() {
                   onClick={() => {
                     alert('Noise Support: support@noise.app');
                   }}
-                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium"
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-left text-sm font-medium cursor-pointer"
                 >
                   <HelpCircle className="w-5 h-5 text-emerald-400" />
                   <span>Help & Support</span>
@@ -1529,7 +1543,7 @@ export default function App() {
                 <div className="pt-4 border-t border-zinc-800">
                   <button
                     onClick={handleSignOut}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-sm font-bold"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition-all text-sm font-bold cursor-pointer"
                   >
                     <LogOut className="w-5 h-5" />
                     <span>Log Out</span>
@@ -1540,7 +1554,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 🌟 COIN PURCHASE MODAL (VIP Unlimited for @sebin_mr & @nora_____noraaa, Cash for Others) */}
+        {/* 🌟 COIN PURCHASE MODAL */}
         {isCoinModalOpen && (
           <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
             <div className="w-full max-w-sm bg-zinc-900 border border-amber-500/40 rounded-3xl p-5 space-y-4 animate-in zoom-in-95 duration-200 text-white shadow-2xl">
@@ -1558,13 +1572,12 @@ export default function App() {
                 </div>
                 <button
                   onClick={handleBack}
-                  className="text-zinc-400 hover:text-white p-1 rounded-full hover:bg-zinc-800"
+                  className="text-zinc-400 hover:text-white p-1 rounded-full hover:bg-zinc-800 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Status Header */}
               <div className="p-3 rounded-2xl bg-zinc-950 border border-zinc-800 flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-zinc-400 uppercase tracking-widest font-bold block">Account ID</span>
@@ -1579,7 +1592,6 @@ export default function App() {
                 </span>
               </div>
 
-              {/* Coin Packs */}
               <div className="space-y-2.5 max-h-72 overflow-y-auto py-1">
                 {[
                   { coins: 1000, price: 0.99, tag: 'Starter' },
@@ -1606,7 +1618,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handlePurchaseCoins(pack.coins, pack.price)}
-                      className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-md ${
+                      className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all active:scale-95 shadow-md cursor-pointer ${
                         isVipUnlimitedUser
                           ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-black hover:brightness-110 shadow-amber-500/20'
                           : 'bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700'
@@ -1644,8 +1656,15 @@ export default function App() {
             room={activeVoiceRoom}
             currentUser={currentUser}
             isOpen={isVoiceRoomModalOpen}
-            onMinimize={handleBack}
-            onLeaveRoom={handleLeaveVoiceRoom}
+            onMinimize={() => {
+              // 🎯 Chatroom minimised/back: Go back to chatroom list modal
+              setIsVoiceRoomModalOpen(false);
+              setIsVoiceRoomsListOpen(true);
+              pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
+            }}
+            onLeaveRoom={() => {
+              handleLeaveVoiceRoom();
+            }}
             onUpdateRoom={handleUpdateVoiceRoom}
             onDeleteRoom={handleDeleteVoiceRoom}
             onRequireLogin={() => setIsLoginModalOpen(true)}
@@ -1682,9 +1701,12 @@ export default function App() {
             currentUser={currentUser}
             onExpand={() => {
               setIsVoiceRoomModalOpen(true);
-              pushNav({ voiceRoomId: activeVoiceRoom.id });
+              setIsVoiceRoomsListOpen(false);
+              pushNav({ voiceRoomId: activeVoiceRoom.id, isVoiceRoomsListOpen: false });
             }}
-            onLeave={handleLeaveVoiceRoom}
+            onLeave={() => {
+              handleLeaveVoiceRoom();
+            }}
             onUpdateRoom={handleUpdateVoiceRoom}
           />
         )}
