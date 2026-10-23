@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, LogIn, AlertCircle } from 'lucide-react';
+import { X, AlertCircle } from 'lucide-react';
 import { auth, GoogleAuthProvider, signInWithPopup, isFirebaseConfigured } from '../firebase';
 import { AppUser } from '../types';
 
@@ -121,56 +121,9 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </svg>
             <span>{isLoading ? 'Connecting to Google...' : 'Sign In with Google'}</span>
           </button>
-
-          {/* Quick Account Switcher / Fallback when preview domain is not yet authorized in Firebase Console */}
-          <div className="pt-2 border-t border-zinc-800">
-            <p className="text-[11px] text-zinc-400 mb-2 font-medium text-center">
-              Or sign in as a user account for testing:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const userA: AppUser = {
-                    uid: '6VNAsBIMzdU6Zfr3BtmYzqP3gu22',
-                    username: 'sebin_mr',
-                    displayName: 'Sebin Mr',
-                    photoURL: '',
-                    bio: 'Creator & sound designer 🚀',
-                    followersCount: 12,
-                    followingCount: 5,
-                  };
-                  onLoginSuccess(userA);
-                  onClose();
-                }}
-                className="py-2 px-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-[11px] text-zinc-200 font-medium text-left truncate transition-colors"
-              >
-                👤 @sebin_mr (Acc A)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const userB: AppUser = {
-                    uid: 'szpjxpWIzkQeuoyoHjwV8uOlOX42',
-                    username: 'shibina_saiju',
-                    displayName: 'Shibina Saiju',
-                    photoURL: '',
-                    bio: 'Exploring music & stories ✨',
-                    followersCount: 8,
-                    followingCount: 3,
-                  };
-                  onLoginSuccess(userB);
-                  onClose();
-                }}
-                className="py-2 px-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-xl text-[11px] text-zinc-200 font-medium text-left truncate transition-colors"
-              >
-                👤 @shibina (Acc B)
-              </button>
-            </div>
-          </div>
         </div>
 
-        <div className="mt-4 text-center text-[10px] text-zinc-500">
+        <div className="mt-5 text-center text-[10px] text-zinc-500">
           Firebase Authentication • Authorized domain: {window.location.hostname}
         </div>
       </div>
