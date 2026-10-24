@@ -786,9 +786,9 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         {/* ========================================================= */}
         {showLudo && (
           <div className="z-30 relative px-2.5 pb-2">
-            <div className="bg-black/80 border border-blue-500/40 rounded-xl p-2">
+            <div className="bg-black/80 border border-blue-500/40 rounded-xl p-2 shadow-2xl">
                <div className="flex justify-between items-center mb-2 px-1">
-                  <span className="text-blue-400 text-xs font-bold uppercase">🎲 Ludo Room</span>
+                  <span className="text-blue-400 text-xs font-bold uppercase tracking-wider">🎲 Ludo Room</span>
                   <button onClick={() => setShowLudo(false)} className="text-zinc-400 hover:text-rose-400">
                     <X className="w-4 h-4" />
                   </button>
