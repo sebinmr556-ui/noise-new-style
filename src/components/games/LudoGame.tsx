@@ -14,8 +14,96 @@ interface GameState {
   turn: string;
 }
 
+// ലുഡോ ബോർഡിന്റെ ഗ്രിഡ് (കളങ്ങൾ) വരയ്ക്കാനുള്ള സഹായ ഫംഗ്ഷൻ
+const renderCells = (count: number, renderFn: (index: number) => React.ReactNode) => {
+  return Array.from({ length: count }).map((_, i) => renderFn(i));
+};
+
+// ലുഡോ ബോർഡ് ഡിസൈൻ (UI Component)
+const LudoBoardVisual = () => {
+  return (
+    <div className="w-full max-w-[280px] aspect-square bg-white border-4 border-zinc-800 grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] gap-0 rounded-md overflow-hidden shadow-2xl">
+      
+      {/* മുകൾ ഭാഗം: ചുവപ്പും പച്ചയും വീടുകളും നടുവിലെ വഴിയും */}
+      <div className="bg-red-500 border border-zinc-800 p-3 flex items-center justify-center">
+        <div className="w-full h-full bg-white rounded-xl p-2 grid grid-cols-2 gap-2 shadow-inner">
+          <div className="bg-red-500 rounded-full shadow-md border-2 border-red-700"></div>
+          <div className="bg-red-500 rounded-full shadow-md border-2 border-red-700"></div>
+          <div className="bg-red-500 rounded-full shadow-md border-2 border-red-700"></div>
+          <div className="bg-red-500 rounded-full shadow-md border-2 border-red-700"></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 grid-rows-6 bg-white border border-zinc-800">
+        {renderCells(18, (i) => {
+          const isGreenHomeStretch = i % 3 === 1 && i !== 1; 
+          const isStart = i === 2;
+          return <div key={`t-${i}`} className={`border border-zinc-300 ${isGreenHomeStretch || isStart ? 'bg-green-500' : 'bg-white'}`}></div>
+        })}
+      </div>
+      <div className="bg-green-500 border border-zinc-800 p-3 flex items-center justify-center">
+        <div className="w-full h-full bg-white rounded-xl p-2 grid grid-cols-2 gap-2 shadow-inner">
+          <div className="bg-green-500 rounded-full shadow-md border-2 border-green-700"></div>
+          <div className="bg-green-500 rounded-full shadow-md border-2 border-green-700"></div>
+          <div className="bg-green-500 rounded-full shadow-md border-2 border-green-700"></div>
+          <div className="bg-green-500 rounded-full shadow-md border-2 border-green-700"></div>
+        </div>
+      </div>
+
+      {/* നടുവിലുള്ള ഭാഗം: ഇടത്തെ വഴിയും വലത്തെ വഴിയും നടുവിലെ കേന്ദ്രവും (Home) */}
+      <div className="grid grid-cols-6 grid-rows-3 bg-white border border-zinc-800">
+        {renderCells(18, (i) => {
+          const isRedHomeStretch = Math.floor(i / 6) === 1 && i !== 6;
+          const isStart = i === 7; // safe zone
+          return <div key={`l-${i}`} className={`border border-zinc-300 ${isRedHomeStretch || isStart ? 'bg-red-500' : 'bg-white'}`}></div>
+        })}
+      </div>
+      <div className="relative border border-zinc-800 bg-zinc-900 overflow-hidden">
+        {/* Ludo Home Center (SVG Triangles) */}
+        <svg viewBox="0 0 100 100" className="w-full h-full">
+          <polygon points="0,0 100,0 50,50" fill="#22c55e" /> {/* പച്ച */}
+          <polygon points="100,0 100,100 50,50" fill="#eab308" /> {/* മഞ്ഞ */}
+          <polygon points="0,100 100,100 50,50" fill="#3b82f6" /> {/* നീല */}
+          <polygon points="0,0 0,100 50,50" fill="#ef4444" /> {/* ചുവപ്പ് */}
+        </svg>
+      </div>
+      <div className="grid grid-cols-6 grid-rows-3 bg-white border border-zinc-800">
+        {renderCells(18, (i) => {
+          const isYellowHomeStretch = Math.floor(i / 6) === 1 && i !== 11;
+          const isStart = i === 10;
+          return <div key={`r-${i}`} className={`border border-zinc-300 ${isYellowHomeStretch || isStart ? 'bg-yellow-400' : 'bg-white'}`}></div>
+        })}
+      </div>
+
+      {/* താഴെയുള്ള ഭാഗം: നീലയും മഞ്ഞയും വീടുകളും നടുവിലെ വഴിയും */}
+      <div className="bg-blue-500 border border-zinc-800 p-3 flex items-center justify-center">
+        <div className="w-full h-full bg-white rounded-xl p-2 grid grid-cols-2 gap-2 shadow-inner">
+          <div className="bg-blue-500 rounded-full shadow-md border-2 border-blue-700"></div>
+          <div className="bg-blue-500 rounded-full shadow-md border-2 border-blue-700"></div>
+          <div className="bg-blue-500 rounded-full shadow-md border-2 border-blue-700"></div>
+          <div className="bg-blue-500 rounded-full shadow-md border-2 border-blue-700"></div>
+        </div>
+      </div>
+      <div className="grid grid-cols-3 grid-rows-6 bg-white border border-zinc-800">
+        {renderCells(18, (i) => {
+          const isBlueHomeStretch = i % 3 === 1 && i !== 16;
+          const isStart = i === 15;
+          return <div key={`b-${i}`} className={`border border-zinc-300 ${isBlueHomeStretch || isStart ? 'bg-blue-500' : 'bg-white'}`}></div>
+        })}
+      </div>
+      <div className="bg-yellow-400 border border-zinc-800 p-3 flex items-center justify-center">
+        <div className="w-full h-full bg-white rounded-xl p-2 grid grid-cols-2 gap-2 shadow-inner">
+          <div className="bg-yellow-400 rounded-full shadow-md border-2 border-yellow-600"></div>
+          <div className="bg-yellow-400 rounded-full shadow-md border-2 border-yellow-600"></div>
+          <div className="bg-yellow-400 rounded-full shadow-md border-2 border-yellow-600"></div>
+          <div className="bg-yellow-400 rounded-full shadow-md border-2 border-yellow-600"></div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// പ്രധാന ഗെയിം കമ്പോണന്റ്
 const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
-  // ലോഡിങ് നിൽക്കാതിരിക്കാൻ ഡിഫോൾട്ട് വാല്യൂ കൊടുക്കുന്നു
   const [gameState, setGameState] = useState<GameState>({
     diceValue: 1,
     lastRolledBy: '',
@@ -26,14 +114,12 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   useEffect(() => {
     if (!roomId || !db) return;
 
-    // ലുഡോ ഡാറ്റാബേസ് പാത്ത്
     const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
     
     const unsubscribe = onSnapshot(gameDocRef, async (docSnap) => {
       if (docSnap.exists()) {
         setGameState(docSnap.data() as GameState);
       } else {
-        // ആദ്യമായി ഓപ്പൺ ചെയ്യുമ്പോൾ ഫയർബേസിൽ ക്രിയേറ്റ് ചെയ്യാൻ
         try {
           await setDoc(gameDocRef, {
             diceValue: 1,
@@ -62,7 +148,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         lastRolledBy: currentUser.username
       });
     } catch (error) {
-      // ഡോക്യുമെന്റ് ഇല്ലെങ്കിൽ പുതിയത് ഉണ്ടാക്കാൻ
       await setDoc(gameDocRef, {
         diceValue: randomNum,
         lastRolledBy: currentUser.username,
@@ -76,19 +161,18 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   return (
     <div className="flex flex-col items-center justify-center p-3 bg-zinc-900 rounded-xl w-full border border-blue-500/30">
       
+      {/* ഡൈസ് റോൾ ചെയ്യുന്ന ഭാഗം */}
       <div className="mb-4 text-center text-white flex flex-col items-center">
         <span className="text-[10px] text-amber-400 mb-2 uppercase tracking-wider font-bold">
           {gameState.lastRolledBy ? `Last rolled by: @${gameState.lastRolledBy}` : 'Ready to start!'}
         </span>
         
-        {/* ഡൈസ് ബോക്സ് */}
         <div className="w-14 h-14 bg-white rounded-xl shadow-[0_0_15px_rgba(255,255,255,0.3)] flex items-center justify-center mb-3 border-2 border-zinc-200">
           <span className={`text-3xl font-black text-black ${isRolling ? 'animate-spin' : ''}`}>
             {gameState.diceValue}
           </span>
         </div>
         
-        {/* റോൾ ബട്ടൺ */}
         <button 
           onClick={rollDice}
           disabled={isRolling}
@@ -98,12 +182,9 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
-      {/* ബോർഡ് വരുന്ന ഭാഗം */}
-      <div className="w-full max-w-[280px] aspect-square bg-zinc-950 border border-zinc-700 rounded-lg flex items-center justify-center relative overflow-hidden">
-        <div className="absolute inset-0 bg-[conic-gradient(at_center,_var(--tw-gradient-stops))] from-blue-500/10 via-purple-500/10 to-blue-500/10 opacity-50" />
-        <p className="text-center text-zinc-500 font-bold text-[10px] z-10 px-4">
-          Ludo Board design will appear here...
-        </p>
+      {/* പുതിയ ലുഡോ ബോർഡ് ഇവിടെ കാണിക്കുന്നു */}
+      <div className="w-full flex justify-center mt-2 drop-shadow-xl">
+        <LudoBoardVisual />
       </div>
 
     </div>
