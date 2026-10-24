@@ -65,6 +65,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { YouTubeWatchTogether } from './YouTubeWatchTogether';
+import LudoGame from './LudoGame'; // ലുഡോ ഗെയിം ഇംപോർട്ട് ചെയ്തു
 // അഗോറയുടെ ഫയൽ ഇംപോർട്ട് ചെയ്യുന്നു
 import { useAgoraAudio } from '../utils/useAgoraAudio';
 
@@ -175,9 +176,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [showDeleteRoomModal, setShowDeleteRoomModal] = useState(false);
   const [selectedSeatAction, setSelectedSeatAction] = useState<{ seatNum: number; occupant: RoomParticipant | null } | null>(null);
 
-  // YouTube Watch Together state
+  // YouTube Watch Together & Ludo state
   const [showYouTube, setShowYouTube] = useState<boolean>(Boolean(currentRoom.youtubeState?.videoId));
   const [isYouTubeMinimized, setIsYouTubeMinimized] = useState<boolean>(false);
+  const [showLudo, setShowLudo] = useState<boolean>(false); // ലുഡോ സ്റ്റേറ്റ് ചേർത്തു
 
   // Chat & Gifts
   const [chatInput, setChatInput] = useState('');
@@ -318,10 +320,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
   // Auto-show YouTube Watch Together if a video starts playing
   useEffect(() => {
-    if (currentRoom.youtubeState?.videoId && !showYouTube) {
+    if (currentRoom.youtubeState?.videoId && !showYouTube && !showLudo) {
       setShowYouTube(true);
     }
-  }, [currentRoom.youtubeState?.videoId]);
+  }, [currentRoom.youtubeState?.videoId, showLudo]);
 
   if (!isOpen) return null;
 
@@ -655,11 +657,31 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-1.5">
+            {/* Ludo Game Button */}
+            <button 
+              onClick={() => {
+                setShowLudo(!showLudo);
+                if (!showLudo) setShowYouTube(false);
+              }}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all shadow-md active:scale-95 cursor-pointer ${
+                showLudo 
+                  ? 'bg-blue-600/90 hover:bg-blue-500 text-white border-blue-500 shadow-blue-600/30 ring-1 ring-blue-400' 
+                  : 'bg-black/60 border-amber-400/40 text-amber-300 hover:bg-black/80'
+              }`}
+              title="Play Ludo"
+              type="button"
+            >
+              <span className="">🎲 Ludo</span>
+            </button>
+
             {/* YouTube Watch Together Button */}
             <button 
               onClick={() => {
                 setShowYouTube(!showYouTube);
-                if (!showYouTube) setIsYouTubeMinimized(false);
+                if (!showYouTube) {
+                  setIsYouTubeMinimized(false);
+                  setShowLudo(false); // യൂട്യൂബ് ഓൺ ആക്കുമ്പോൾ ലുഡോ ഹൈഡ് ചെയ്യാൻ
+                }
               }}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all shadow-md active:scale-95 cursor-pointer ${
                 showYouTube 
@@ -756,6 +778,23 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               isMinimized={isYouTubeMinimized}
               onToggleMinimize={() => setIsYouTubeMinimized(!isYouTubeMinimized)}
             />
+          </div>
+        )}
+
+        {/* ========================================================= */}
+        {/* LUDO GAME BOARD                                           */}
+        {/* ========================================================= */}
+        {showLudo && (
+          <div className="z-30 relative px-2.5 pb-2">
+            <div className="bg-black/80 border border-blue-500/40 rounded-xl p-2">
+               <div className="flex justify-between items-center mb-2 px-1">
+                  <span className="text-blue-400 text-xs font-bold uppercase">🎲 Ludo Room</span>
+                  <button onClick={() => setShowLudo(false)} className="text-zinc-400 hover:text-rose-400">
+                    <X className="w-4 h-4" />
+                  </button>
+               </div>
+               <LudoGame roomId={roomId} currentUser={currentUser} />
+            </div>
           </div>
         )}
 
