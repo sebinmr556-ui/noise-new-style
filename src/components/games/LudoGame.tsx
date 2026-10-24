@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - ULTIMATE LUXURY CINEMATIC LUDO ENGINE (PREMIUM 3D TOKENS & STARS)
+ * NOISE / THE DIGITALIGHT - ULTIMATE LUXURY CINEMATIC LUDO ENGINE (REAL FULL RULES BUILD)
  * ====================================================================================
  */
 
@@ -18,7 +18,7 @@ export type PlayerColor = 'red' | 'green' | 'blue' | 'yellow';
 
 export interface TokenState {
   id: number;
-  position: number; // -1: Base, 0-51: Main Track, 99: Finished Goal
+  position: number; // -1: Base, 0-51: Main Track, 52-57: Home Stretch, 99: Finished Goal
   isHome: boolean;
 }
 
@@ -45,7 +45,7 @@ const initialTokensState: PlayerTokens = {
   yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
 };
 
-// Precise Star / Safe Positions on the main track
+// Precise Star / Safe Positions on the main track where tokens cannot be captured
 const STAR_TRACK_INDICES = [0, 8, 13, 21, 26, 34, 39, 47];
 
 const CINEMATIC_THEMES = [
