@@ -30,7 +30,7 @@ interface GameState {
 }
 
 // ====================================================================================
-// 🎬 ULTIMATE 2X EXPANDED CINEMATIC REALISTIC THEMES ARCHITECTURE (100% Realism)
+// 🎬 ULTIMATE CINEMATIC REALISTIC THEMES ARCHITECTURE (Zero Cartoons, Pure Realism)
 // ====================================================================================
 const CINEMATIC_THEMES = [
   { 
@@ -121,7 +121,7 @@ const CINEMATIC_THEMES = [
     id: 'horror', name: '🧛 Gothic Blood Crypt', 
     bgWrap: 'from-zinc-950 via-red-950/95 to-black', 
     vignette: 'shadow-[inset_0_0_160px_rgba(153,27,27,1)]',
-    boardStyle: 'border-red-800 bg-zinc-950 shadow-[0_60px_120px_rgba(0,0,0,1),0_0_100px_rgba(185,28,28,1)]',
+    boardStyle: 'border-red-800 bg-zinc-950 shadow-[0_60px_120px_rgba(0,0,0,1),0_0_100px_rgba(185,28,28,0.95)]',
     diceBg: 'bg-gradient-to-br from-zinc-900 via-red-950 to-black border-red-600 text-red-500 shadow-[0_30px_60px_rgba(0,0,0,0.98)]',
     effectName: 'Darkness Fog, Gothic Stone & Creepy Winds',
     ambientSoundUrl: 'https://actions.google.com/sounds/v1/ambiences/creepy_wind.ogg',
@@ -154,7 +154,7 @@ const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: {ou
   <div className={`p-3.5 sm:p-4.5 flex items-center justify-center ${outerClass} relative border-[3.5px] border-black overflow-hidden`}>
     <div className="w-full h-full bg-black/90 backdrop-blur-xl rounded-sm p-3 grid grid-cols-2 gap-3 shadow-[inset_0_15px_30px_rgba(0,0,0,1)] border border-white/20 relative z-10">
       {tokens.map((token) => (
-        <div key={token.id} className="rounded-full bg-black shadow-[inset_0_15px_30px_rgba(0,0,0,1)] border border-white/30 flex items-center justify-center relative overflow-hidden">
+        <div key={token.id} className="rounded-full bg-black shadow-[inset_0_12px_24px_rgba(0,0,0,1)] border border-white/30 flex items-center justify-center relative overflow-hidden">
            <Token colorClass={tokenColor} onClick={() => onTokenClick && onTokenClick(playerColor, token.id)} />
         </div>
       ))}
@@ -351,7 +351,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     }, 1200);
   };
 
-  // Comprehensive Token Movement Logic (Moving tokens on track according to dice)
   const handleTokenClick = async (playerColor: keyof PlayerTokens, tokenId: number) => {
     if (!currentUser || !roomId) return;
     playSfx('move');
@@ -363,17 +362,15 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     if (tokenIndex === -1) return;
     const token = tokenList[tokenIndex];
 
-    // If in base (-1) and rolled 6, bring it out to start position (0)
     if (token.position === -1) {
       if (gameState.diceValue === 6) {
         token.position = 0;
         token.isHome = false;
       }
     } else {
-      // Advance token position based on dice value
       token.position += gameState.diceValue;
       if (token.position >= 56) {
-        token.position = 99; // Reached goal / finished
+        token.position = 99;
       }
     }
 
@@ -425,9 +422,8 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   };
 
   return (
-    <div className={`flex flex-col items-center justify-center p-4 bg-gradient-to-br ${activeTheme.bgWrap} rounded-3xl w-full border-[3.5px] border-white/30 ${activeTheme.vignette} relative overflow-hidden transition-colors duration-700`}>
+    <div className={`flex flex-col items-center justify-center p-4 bg-gradient-to-br ${activeTheme.bgWrap} rounded-3xl w-full border-[3.5px] border-white/25 ${activeTheme.vignette} relative overflow-hidden transition-colors duration-700`}>
       
-      {/* Top Header with Sound Control & Turn Indicator */}
       <div className="w-full flex items-center justify-between pb-2.5 px-1 mb-1 border-b border-white/10">
         <span className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest drop-shadow">
           TURN: {gameState.turn.toUpperCase()}
@@ -444,7 +440,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
-      {/* Cinematic Theme Selector Bar */}
       <div className="w-full flex overflow-x-auto gap-2.5 pb-3 mb-2 scrollbar-hide snap-x">
         {CINEMATIC_THEMES.map(theme => (
           <button 
@@ -462,7 +457,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
           {gameState.lastRolledBy ? `ROLLED BY: @${gameState.lastRolledBy}` : 'ENTER THE REALISTIC REALM'}
         </span>
         
-        {/* High Fidelity Dice Container */}
         <div className={`w-20 h-20 ${activeTheme.diceBg} rounded-2xl flex items-center justify-center mb-4 border-[3px] relative overflow-hidden transform transition-all duration-500 ${isRolling ? 'animate-spin scale-110' : ''}`}>
           {renderDiceDots(displayFace)}
         </div>
@@ -476,9 +470,8 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
-      {/* Structured Realistically Detailed Board with Real Token Sync */}
       <div className="w-full flex justify-center mt-2 pb-2 relative z-20 drop-shadow-[0_35px_60px_rgba(0,0,0,1)]">
-        <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenMove} />
+        <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenClick} />
       </div>
 
     </div>
