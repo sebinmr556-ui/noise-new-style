@@ -65,7 +65,7 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { YouTubeWatchTogether } from './YouTubeWatchTogether';
-import LudoGame from './LudoGame'; // ലുഡോ ഗെയിം ഇംപോർട്ട് ചെയ്തു
+import LudoGame from './games/LudoGame'; // എറർ ഒഴിവാക്കാൻ പാത്ത് ./games/LudoGame എന്നാക്കി മാറ്റി
 // അഗോറയുടെ ഫയൽ ഇംപോർട്ട് ചെയ്യുന്നു
 import { useAgoraAudio } from '../utils/useAgoraAudio';
 
