@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - ULTIMATE LUXURY CINEMATIC LUDO ENGINE (REAL FULL RULES BUILD)
+ * NOISE / THE DIGITALIGHT - ULTIMATE LUXURY CINEMATIC LUDO ENGINE (CLASSIC PAWN TOKENS)
  * ====================================================================================
  */
 
@@ -45,7 +45,6 @@ const initialTokensState: PlayerTokens = {
   yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
 };
 
-// Precise Star / Safe Positions on the main track where tokens cannot be captured
 const STAR_TRACK_INDICES = [0, 8, 13, 21, 26, 34, 39, 47];
 
 const CINEMATIC_THEMES = [
@@ -111,13 +110,22 @@ const renderCells = (count: number, renderFn: (index: number) => React.ReactNode
   return Array.from({ length: count }).map((_, i) => renderFn(i));
 };
 
-// Luxury 3D Glossy Token Component
+// Classic Luxury Ludo Pawn (Karukkal) Component using SVG
 const Token = ({ colorClass, tokenId, onClick }: { colorClass: string, tokenId: number, onClick?: () => void }) => (
   <div 
     onClick={onClick} 
-    className={`w-[82%] h-[82%] rounded-full ${colorClass} shadow-[0_4px_10px_rgba(0,0,0,0.9),inset_0_2px_4px_rgba(255,255,255,0.8),inset_0_-3px_5px_rgba(0,0,0,0.8)] border-[2px] border-white/90 cursor-pointer transform hover:scale-125 transition-all flex items-center justify-center text-[10px] font-black text-white drop-shadow-md z-20`}
+    className={`w-6 h-6 cursor-pointer transform hover:scale-125 transition-all flex items-center justify-center relative drop-shadow-[0_4px_6px_rgba(0,0,0,0.9)] z-20`}
+    title={`Token ${tokenId}`}
   >
-    <span className="drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">{tokenId}</span>
+    <svg viewBox="0 0 24 24" className={`w-full h-full ${colorClass} filter drop-shadow`}>
+      <path 
+        d="M12 2C10.34 2 9 3.34 9 5C9 5.74 9.27 6.42 9.72 6.95C7.52 7.76 6 9.87 6 12.3C6 14.12 6.92 15.69 8.32 16.59C7.5 18.1 7 19.98 7 22H17C17 19.98 16.5 18.1 15.68 16.59C17.08 15.69 18 14.12 18 12.3C18 9.87 16.48 7.76 14.28 6.95C14.73 6.42 15 5.74 15 5C15 3.34 13.66 2 12 2Z" 
+        stroke="#ffffff" 
+        strokeWidth="1.5" 
+        fill="currentColor"
+      />
+    </svg>
+    <span className="absolute text-[8px] font-black text-white top-1.5 drop-shadow-[0_1px_1px_rgba(0,0,0,1)]">{tokenId}</span>
   </div>
 );
 
@@ -140,10 +148,10 @@ const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: { o
 
 const Tile = ({ colorClass, hasStar, tokensOnTile, onTokenClick }: { colorClass: string, hasStar: boolean, tokensOnTile?: {player: PlayerColor, id: number}[], onTokenClick: (p: PlayerColor, id: number) => void }) => {
   const colorMap: Record<PlayerColor, string> = {
-    red: 'bg-gradient-to-br from-red-500 via-red-600 to-red-800',
-    green: 'bg-gradient-to-br from-emerald-400 via-emerald-600 to-emerald-800',
-    blue: 'bg-gradient-to-br from-blue-400 via-blue-600 to-blue-800',
-    yellow: 'bg-gradient-to-br from-amber-300 via-amber-500 to-amber-700'
+    red: 'text-red-500 fill-red-600',
+    green: 'text-emerald-400 fill-emerald-500',
+    blue: 'text-blue-500 fill-blue-600',
+    yellow: 'text-amber-400 fill-amber-500'
   };
 
   return (
@@ -172,11 +180,13 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
     const colors: PlayerColor[] = ['red', 'green', 'blue', 'yellow'];
     
     colors.forEach(color => {
-      tokens[color].forEach(token => {
-        if (token.position === tileIndex) {
-          result.push({ player: color, id: token.id });
-        }
-      });
+      if (tokens[color]) {
+        tokens[color].forEach(token => {
+          if (token.position === tileIndex) {
+            result.push({ player: color, id: token.id });
+          }
+        });
+      }
     });
     return result;
   };
@@ -188,7 +198,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
       <div className="w-full h-full border-[3px] border-black grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] overflow-hidden bg-stone-950 relative z-10 shadow-[0_25px_50px_rgba(0,0,0,1)]">
         
         {/* Red Base */}
-        <Base outerClass="bg-red-950" tokenColor="bg-gradient-to-br from-red-500 to-red-800" tokens={tokens.red} playerColor="red" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-red-950" tokenColor="text-red-500 fill-red-600" tokens={tokens.red} playerColor="red" onTokenClick={onTokenClick} />
         
         {/* Top Track (Green section) */}
         <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
@@ -206,7 +216,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Green Base */}
-        <Base outerClass="bg-emerald-950" tokenColor="bg-gradient-to-br from-emerald-400 to-emerald-700" tokens={tokens.green} playerColor="green" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-emerald-950" tokenColor="text-emerald-400 fill-emerald-500" tokens={tokens.green} playerColor="green" onTokenClick={onTokenClick} />
 
         {/* Left Track (Red section) */}
         <div className="grid grid-cols-6 grid-rows-3 bg-stone-900">
@@ -249,7 +259,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Blue Base */}
-        <Base outerClass="bg-blue-950" tokenColor="bg-gradient-to-br from-blue-500 to-blue-800" tokens={tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-blue-950" tokenColor="text-blue-500 fill-blue-600" tokens={tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
 
         {/* Bottom Track (Blue section) */}
         <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
@@ -267,7 +277,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Yellow Base */}
-        <Base outerClass="bg-amber-950" tokenColor="bg-gradient-to-br from-amber-400 to-amber-700" tokens={tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-amber-950" tokenColor="text-amber-400 fill-amber-500" tokens={tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
       </div>
     </div>
   );
@@ -425,6 +435,9 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     if (gameState.turn !== playerColor) return;
 
     const updatedTokens = JSON.parse(JSON.stringify(gameState.tokens)) as PlayerTokens;
+    if (!updatedTokens[playerColor]) {
+      updatedTokens[playerColor] = initialTokensState[playerColor];
+    }
     const tokenList = updatedTokens[playerColor];
     const token = tokenList.find((t: TokenState) => t.id === tokenId);
 
@@ -448,7 +461,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         if (!STAR_TRACK_INDICES.includes(newPos)) {
           const colors: PlayerColor[] = ['red', 'green', 'blue', 'yellow'];
           colors.forEach(col => {
-            if (col !== playerColor) {
+            if (col !== playerColor && updatedTokens[col]) {
               updatedTokens[col].forEach((oppToken: TokenState) => {
                 if (oppToken.position === newPos) {
                   oppToken.position = -1; // Send opponent back to base
