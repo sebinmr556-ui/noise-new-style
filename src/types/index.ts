@@ -159,6 +159,7 @@ export interface VoiceRoom {
   ambientVibe?: 'none' | 'lofi' | 'rain' | 'cafe' | 'synth';
   isLive: boolean;
   createdAt: number;
+  expiresAt?: number;
   activeSpeakerUid?: string;
   slotLikes?: { [slotIndex: number]: number };
   pkBattle?: PKBattle;

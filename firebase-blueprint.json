@@ -81,6 +81,28 @@
         "clientTimestamp": { "type": "number", "description": "Client millisecond timestamp" }
       },
       "required": ["participants", "senderId", "receiverId"]
+    },
+    "VoiceRoom": {
+      "title": "VoiceRoom",
+      "description": "Live voice chatroom with temporary lifetime and automatic cascading deletion of messages and IDs.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Temporary chat room ID" },
+        "title": { "type": "string", "description": "Title of the chat room" },
+        "topic": { "type": "string", "description": "Topic or category" },
+        "hostUid": { "type": "string", "description": "UID of the room host" },
+        "hostUsername": { "type": "string", "description": "Host username" },
+        "hostDisplayName": { "type": "string", "description": "Host display name" },
+        "hostAvatar": { "type": "string", "description": "Host avatar URL" },
+        "speakers": { "type": "array", "description": "Active seated speakers" },
+        "listeners": { "type": "array", "description": "Current listeners" },
+        "tags": { "type": "array", "description": "Room tags" },
+        "ambientVibe": { "type": "string", "description": "Background ambience sound" },
+        "isLive": { "type": "boolean", "description": "Live state flag" },
+        "createdAt": { "type": "number", "description": "Creation timestamp in milliseconds" },
+        "expiresAt": { "type": "number", "description": "Expiration timestamp in milliseconds for automatic cleanup" }
+      },
+      "required": ["title", "hostUid", "isLive", "createdAt", "expiresAt"]
     }
   },
   "firestore": {
@@ -99,6 +121,10 @@
     "/direct_messages/{msgId}": {
       "schema": "DirectMessage",
       "description": "Direct message thread entries with seenBy indicator array"
+    },
+    "/voice_rooms/{roomId}": {
+      "schema": "VoiceRoom",
+      "description": "Ephemeral voice chatrooms collection with automatic deletion rule and cascading message cleanup"
     }
   }
 }

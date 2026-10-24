@@ -8,6 +8,7 @@ import {
   collection, 
   addDoc,
   deleteDoc,
+  setDoc,
   serverTimestamp,
   getDoc,
   getDocs,
@@ -148,86 +149,7 @@ export default function App() {
   });
   const [selectedUserProfile, setSelectedUserProfile] = useState<PublicUserProfile | null>(null);
 
-  const DEFAULT_ROOMS: VoiceRoom[] = [
-    {
-      id: 'room-lounge-1',
-      title: 'Late Night Chill & Lofi ☕️',
-      topic: 'Casual Hangout & Music',
-      hostUid: 'host-maya',
-      hostUsername: 'maya_beats',
-      hostDisplayName: 'Maya Beats',
-      hostAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-      speakers: [
-        {
-          uid: 'host-maya',
-          username: 'maya_beats',
-          displayName: 'Maya Beats',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80',
-          isHost: true,
-          isSpeaker: true,
-          isMuted: false,
-          isSpeaking: true,
-          joinedAt: Date.now() - 3600000,
-          seatNumber: 0,
-        },
-        {
-          uid: 'user-kai',
-          username: 'kai_dj',
-          displayName: 'Kai Music',
-          avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=200&q=80',
-          isSpeaker: true,
-          isMuted: false,
-          isSpeaking: false,
-          joinedAt: Date.now() - 1800000,
-          seatNumber: 1,
-        }
-      ],
-      listeners: [
-        {
-          uid: 'user-sam',
-          username: 'sam_travels',
-          displayName: 'Sam R.',
-          joinedAt: Date.now() - 900000,
-        }
-      ],
-      tags: ['Music', 'Lofi', 'Chill'],
-      ambientVibe: 'lofi',
-      isLive: true,
-      createdAt: Date.now() - 3600000,
-      slotLikes: { 0: 24, 1: 18 }
-    },
-    {
-      id: 'room-founders-2',
-      title: 'Creators & Tech Talk 🚀',
-      topic: 'App Design & Building in Public',
-      hostUid: 'host-dev',
-      hostUsername: 'alex_codes',
-      hostDisplayName: 'Alex C.',
-      hostAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-      speakers: [
-        {
-          uid: 'host-dev',
-          username: 'alex_codes',
-          displayName: 'Alex C.',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80',
-          isHost: true,
-          isSpeaker: true,
-          isMuted: false,
-          isSpeaking: false,
-          joinedAt: Date.now() - 7200000,
-          seatNumber: 0,
-        }
-      ],
-      listeners: [],
-      tags: ['Tech', 'Design', 'Startup'],
-      ambientVibe: 'none',
-      isLive: true,
-      createdAt: Date.now() - 7200000,
-      slotLikes: { 0: 42 }
-    }
-  ];
-
-  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>(DEFAULT_ROOMS);
+  const [voiceRooms, setVoiceRooms] = useState<VoiceRoom[]>([]);
   const [activeVoiceRoom, setActiveVoiceRoom] = useState<VoiceRoom | null>(null);
   const [isVoiceRoomModalOpen, setIsVoiceRoomModalOpen] = useState(false);
   const [isCreateVoiceRoomOpen, setIsCreateVoiceRoomOpen] = useState(!!initialNav.isCreateVoiceRoomOpen);
@@ -256,6 +178,23 @@ export default function App() {
       window.history.pushState(next, '', url);
       stepCountRef.current++;
     }
+  };
+
+  const hasAnyModalOpen = () => {
+    return (
+      selectedDetailPost !== null ||
+      selectedUserProfile !== null ||
+      isDirectModalOpen ||
+      isNotificationsOpen ||
+      activeStoryIndex !== null ||
+      activeCommentPost !== null ||
+      isVoiceRoomsListOpen ||
+      isCreateVoiceRoomOpen ||
+      isVoiceRoomModalOpen ||
+      isMenuOpen ||
+      isCoinModalOpen ||
+      isLoginModalOpen
+    );
   };
 
   // 🎯 STEP-BY-STEP BACK HANDLER (Home -> Chatroom List -> Chatroom -> Chatroom List -> Home)
@@ -602,16 +541,14 @@ export default function App() {
       setStories(loaded);
     });
 
-    const unsubRooms = onSnapshot(query(collection(db, 'voice_rooms'), orderBy('createdAt', 'desc')), (snapshot) => {
+    const unsubRooms = onSnapshot(collection(db, 'voice_rooms'), (snapshot) => {
       const loaded: VoiceRoom[] = [];
+      const now = Date.now();
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
         const id = docSnap.id;
         if (
           data.isDummy === true ||
-          id.startsWith('room-1') ||
-          id.startsWith('room-2') ||
-          id.startsWith('room-3') ||
           id.startsWith('mock-') ||
           id.startsWith('dummy-') ||
           data.hostUid === 'system' ||
@@ -619,6 +556,16 @@ export default function App() {
         ) {
           return;
         }
+
+        const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : now);
+        const expiresAt = typeof data.expiresAt === 'number' ? data.expiresAt : (createdAt + 30 * 60 * 1000);
+
+        // Auto-delete / filter out expired or inactive rooms
+        if (now >= expiresAt || data.isLive === false) {
+          fetch(`/api/chatrooms/${encodeURIComponent(id)}`, { method: 'DELETE' }).catch(() => {});
+          return;
+        }
+
         loaded.push({
           id: docSnap.id,
           title: data.title || 'Live Voice Room',
@@ -632,11 +579,29 @@ export default function App() {
           tags: Array.isArray(data.tags) ? data.tags : [],
           ambientVibe: data.ambientVibe || 'none',
           isLive: data.isLive !== false,
-          createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : data.createdAt || Date.now(),
+          createdAt,
+          expiresAt,
           slotLikes: data.slotLikes || {},
+          pkBattle: data.pkBattle,
+          activeGame: data.activeGame,
         });
       });
+
+      loaded.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setVoiceRooms(loaded);
+
+      // Security and Consistency: Prevent deleted rooms and IDs from remaining open in UI
+      setActiveVoiceRoom((curr) => {
+        if (!curr) return null;
+        const fresh = loaded.find((r) => r.id === curr.id);
+        if (!fresh) {
+          setIsVoiceRoomModalOpen(false);
+          setIsVoiceRoomsListOpen(true);
+          pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
+          return null;
+        }
+        return fresh;
+      });
     });
 
     return () => {
@@ -1083,8 +1048,21 @@ export default function App() {
     }
   };
 
-  const handleCreateVoiceRoom = async (roomData: { title: string; topic: string; tags: string[]; ambientVibe: any }) => {
+  const handleCreateVoiceRoom = async (roomData: { 
+    title: string; 
+    topic: string; 
+    tags: string[]; 
+    roomType?: string;
+    roomTheme?: string;
+    seatCount?: number;
+    ambientVibe: any;
+  }) => {
     if (!currentUser) return;
+    const now = Date.now();
+    // Configure explicit 30-minute expiration rule for automatic deletion
+    const expiresAt = now + 30 * 60 * 1000;
+    const roomId = `room-${now}-${Math.random().toString(36).substring(2, 7)}`;
+
     const hostParticipant: RoomParticipant = {
       uid: currentUser.uid,
       username: currentUser.username,
@@ -1094,11 +1072,11 @@ export default function App() {
       isSpeaker: true,
       isMuted: false,
       isSpeaking: false,
-      joinedAt: Date.now(),
+      joinedAt: now,
       seatNumber: 1,
     };
     const newRoom: VoiceRoom = {
-      id: `room-${Date.now()}`,
+      id: roomId,
       title: roomData.title,
       topic: roomData.topic,
       hostUid: currentUser.uid,
@@ -1110,10 +1088,37 @@ export default function App() {
       tags: roomData.tags,
       ambientVibe: roomData.ambientVibe,
       isLive: true,
-      createdAt: Date.now(),
+      createdAt: now,
+      expiresAt: expiresAt,
       slotLikes: {},
     };
-    setVoiceRooms(prev => [newRoom, ...prev]);
+
+    // Database Enforcement: Save to Firestore with explicit expiration rule
+    if (isFirebaseConfigured && db) {
+      try {
+        await setDoc(doc(db, 'voice_rooms', roomId), {
+          id: roomId,
+          title: roomData.title,
+          topic: roomData.topic,
+          hostUid: currentUser.uid,
+          hostUsername: currentUser.username,
+          hostDisplayName: currentUser.displayName,
+          hostAvatar: currentUser.photoURL || '',
+          speakers: [hostParticipant],
+          listeners: [],
+          tags: roomData.tags,
+          ambientVibe: roomData.ambientVibe,
+          isLive: true,
+          createdAt: now,
+          expiresAt: expiresAt,
+          slotLikes: {},
+        });
+      } catch (err) {
+        console.error('Failed to save voice room to Firestore:', err);
+      }
+    }
+
+    setVoiceRooms(prev => [newRoom, ...prev.filter(r => r.id !== roomId)]);
     setActiveVoiceRoom(newRoom);
     setIsVoiceRoomModalOpen(true);
     setIsVoiceRoomsListOpen(false);
@@ -1143,11 +1148,44 @@ export default function App() {
       setIsVoiceRoomsListOpen(true);
       pushNav({ voiceRoomId: null, isVoiceRoomsListOpen: true });
     }
+
+    // Backend deletion + Firestore cascading cleanup of messages and temporary IDs
+    try {
+      fetch(`/api/chatrooms/${encodeURIComponent(roomId)}`, { method: 'DELETE' }).catch(() => {});
+    } catch {}
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const msgCol = collection(db, 'voice_rooms', roomId, 'messages');
+        const snaps = await getDocs(msgCol);
+        for (const m of snaps.docs) {
+          await deleteDoc(doc(db, 'voice_rooms', roomId, 'messages', m.id));
+        }
+        await deleteDoc(doc(db, 'voice_rooms', roomId));
+      } catch (e) {
+        console.debug('Error deleting voice room from Firestore:', e);
+      }
+    }
   };
 
-  const handleUpdateVoiceRoom = (updatedRoom: VoiceRoom) => {
+  const handleUpdateVoiceRoom = async (updatedRoom: VoiceRoom) => {
     setActiveVoiceRoom(updatedRoom);
     setVoiceRooms(prev => prev.map(r => r.id === updatedRoom.id ? updatedRoom : r));
+
+    if (isFirebaseConfigured && db && updatedRoom.id) {
+      try {
+        await updateDoc(doc(db, 'voice_rooms', updatedRoom.id), {
+          speakers: updatedRoom.speakers,
+          listeners: updatedRoom.listeners,
+          isLive: updatedRoom.isLive,
+          slotLikes: updatedRoom.slotLikes || {},
+          ...(updatedRoom.pkBattle ? { pkBattle: updatedRoom.pkBattle } : {}),
+          ...(updatedRoom.activeGame ? { activeGame: updatedRoom.activeGame } : {}),
+        });
+      } catch (e) {
+        console.debug('Error syncing voice room update:', e);
+      }
+    }
   };
 
   const handleOpenVoiceChatroomFromStory = (targetHostUsername?: string) => {

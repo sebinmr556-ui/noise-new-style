@@ -20,7 +20,8 @@ import {
   Flame,
   TrendingUp,
   Tag,
-  ArrowUpRight
+  ArrowUpRight,
+  Clock
 } from 'lucide-react';
 import { Post, AppUser, PublicUserProfile } from '../types';
 import { searchRegisteredUsers, getSuggestedDatabaseUsers } from '../utils/userSearch';
@@ -153,6 +154,62 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
   const [selectedTopic, setSelectedTopic] = useState<TrendingTopic | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Persistent Recent Searches State (localStorage)
+  const RECENT_SEARCHES_KEY = 'noise_recent_searches';
+  const [recentSearches, setRecentSearches] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('noise_recent_searches');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item) => typeof item === 'string' && item.trim().length > 0).slice(0, 15);
+        }
+      }
+    } catch (e) {
+      console.debug('Error reading recent searches from localStorage:', e);
+    }
+    return [];
+  });
+
+  const addRecentSearch = (term: string) => {
+    const clean = term.trim();
+    if (!clean || clean.length < 2) return;
+
+    setRecentSearches((prev) => {
+      const filtered = prev.filter((item) => item.toLowerCase() !== clean.toLowerCase());
+      const nextList = [clean, ...filtered].slice(0, 15);
+      try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(nextList));
+      } catch (e) {
+        console.debug('Error saving recent searches to localStorage:', e);
+      }
+      return nextList;
+    });
+  };
+
+  const removeRecentSearch = (termToRemove: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRecentSearches((prev) => {
+      const nextList = prev.filter((item) => item.toLowerCase() !== termToRemove.toLowerCase());
+      try {
+        localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(nextList));
+      } catch (e) {
+        console.debug('Error removing recent search:', e);
+      }
+      return nextList;
+    });
+  };
+
+  const clearAllRecentSearches = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setRecentSearches([]);
+    try {
+      localStorage.removeItem(RECENT_SEARCHES_KEY);
+    } catch (e) {
+      console.debug('Error clearing recent searches:', e);
+    }
+  };
+
   // Real Database Users State
   const [dbUsers, setDbUsers] = useState<PublicUserProfile[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
@@ -227,13 +284,16 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           maxResults: 30,
         });
         setDbUsers(results);
+        if (trimmedQuery.length >= 3) {
+          addRecentSearch(trimmedQuery);
+        }
       } catch (err: any) {
         console.error('User search error:', err);
         setUserSearchError('Error connecting to the users database. Please try again.');
       } finally {
         setIsLoadingUsers(false);
       }
-    }, 250);
+    }, 350);
 
     return () => {
       if (debounceTimerRef.current) {
@@ -311,12 +371,25 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
     <div className="bg-zinc-950 text-zinc-100 min-h-[calc(100vh-110px)] pb-24">
       {/* Search Header */}
       <div className="sticky top-14 z-30 bg-zinc-950/95 backdrop-blur-xl px-3 pt-3 pb-2.5 border-b border-zinc-800/80">
-        <div className="relative">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (searchQuery.trim()) {
+              addRecentSearch(searchQuery.trim());
+            }
+          }}
+          className="relative"
+        >
           <Search className="w-4 h-4 text-zinc-500 absolute left-3.5 top-3" />
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && searchQuery.trim()) {
+                addRecentSearch(searchQuery.trim());
+              }
+            }}
             placeholder="Search by registered User ID, @username, or name..."
             className="w-full bg-zinc-900/90 hover:bg-zinc-850 focus:bg-zinc-900 text-xs text-zinc-100 placeholder-zinc-500 pl-9 pr-9 py-2.5 rounded-xl border border-zinc-800 focus:border-purple-500/80 focus:ring-1 focus:ring-purple-500/50 focus:outline-none transition-all shadow-inner"
           />
@@ -327,14 +400,14 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
           ) : searchQuery ? (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-2.5 p-0.5 text-zinc-500 hover:text-zinc-200"
+              className="absolute right-3 top-2.5 p-0.5 text-zinc-500 hover:text-zinc-200 cursor-pointer"
               type="button"
               title="Clear search"
             >
               <X className="w-4 h-4" />
             </button>
           ) : null}
-        </div>
+        </form>
 
         {/* View Mode Tabs (Top / User ID & Accounts / Posts) */}
         <div className="flex items-center gap-1.5 mt-2.5">
@@ -407,6 +480,52 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
         )}
       </div>
 
+      {/* RECENT SEARCHES SECTION (Persistent across sessions via localStorage) */}
+      {!searchQuery && recentSearches.length > 0 && (
+        <div className="px-3.5 py-3 border-b border-zinc-900 bg-zinc-950/70 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between mb-2 px-1">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-purple-400" />
+              <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider">
+                Recent Searches
+              </h3>
+            </div>
+            <button
+              onClick={clearAllRecentSearches}
+              type="button"
+              className="text-[11px] text-zinc-500 hover:text-rose-400 font-medium transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-zinc-900"
+              title="Clear all recent searches"
+            >
+              Clear all
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+            {recentSearches.map((term) => (
+              <div
+                key={term}
+                onClick={() => {
+                  setSearchQuery(term);
+                  addRecentSearch(term);
+                }}
+                className="group flex-none flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/90 hover:bg-zinc-850 border border-zinc-800 hover:border-purple-500/50 text-xs text-zinc-200 transition-all cursor-pointer shadow-xs active:scale-95"
+              >
+                <Search className="w-3 h-3 text-zinc-500 group-hover:text-purple-400 transition-colors" />
+                <span className="truncate max-w-[150px] font-medium">{term}</span>
+                <button
+                  type="button"
+                  onClick={(e) => removeRecentSearch(term, e)}
+                  className="p-0.5 rounded-full hover:bg-zinc-800 text-zinc-500 hover:text-zinc-200 transition-colors ml-0.5 cursor-pointer"
+                  title={`Remove "${term}"`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* SECTION 1: REAL DATABASE USER RESULTS */}
       {(activeTab === 'accounts' || (searchQuery.trim().length > 0 && activeTab === 'all')) && (
         <div className="p-3">
@@ -472,7 +591,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
               return (
                 <div
                   key={user.uid}
-                  onClick={() => onSelectUser?.(user)}
+                  onClick={() => {
+                    if (searchQuery.trim()) {
+                      addRecentSearch(searchQuery.trim());
+                    }
+                    onSelectUser?.(user);
+                  }}
                   className="p-3 bg-zinc-900/70 hover:bg-zinc-900 border border-zinc-800/80 hover:border-zinc-700/80 rounded-2xl transition-all cursor-pointer flex items-center justify-between gap-3 group shadow-xs"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -766,7 +890,12 @@ export const ExploreView: React.FC<ExploreViewProps> = ({
                 return (
                   <div
                     key={post.id}
-                    onClick={() => onSelectPost(post)}
+                    onClick={() => {
+                      if (searchQuery.trim()) {
+                        addRecentSearch(searchQuery.trim());
+                      }
+                      onSelectPost(post);
+                    }}
                     className="group relative aspect-square bg-zinc-900 overflow-hidden cursor-pointer"
                   >
                     {isVideo ? (
