@@ -1,38 +1,73 @@
+/**
+ * ====================================================================================
+ * PROJECT: NOISE / THE DIGITALIGHT - ULTIMATE MULTIVERSE CINEMATIC LUDO ENGINE
+ * ARCHITECTURE: ENTERPRISE-GRADE REACT + TYPESCRIPT + FIREBASE SYNCHRONIZED GAME SYSTEM
+ * AUTHOR: SEBIN MR / FULL-STACK AUDIO-VISUAL SYSTEM
+ * VERSION: 5.0.0 (ULTRA-DETAILED PRODUCTION BUILD)
+ * ====================================================================================
+ */
+
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
 import { AppUser } from '../../types';
 
-interface LudoGameProps {
+// ====================================================================================
+// 1. EXTENDED INTERFACES & TYPE DEFINITIONS
+// ====================================================================================
+
+export interface LudoGameProps {
   roomId: string;
   currentUser: AppUser | null;
 }
 
-interface TokenState {
+export type PlayerColor = 'red' | 'green' | 'blue' | 'yellow';
+
+export interface TokenState {
   id: number;
-  position: number; // -1: Base, 0-51: Main Track, 52-57: Home Stretch, 99: Finished
+  position: number; // -1: Base, 0-51: Main Track, 52-57: Home Stretch, 99: Finished Goal
   isHome: boolean;
+  isSafeZone: boolean;
 }
 
-interface PlayerTokens {
+export interface PlayerTokens {
   red: TokenState[];
   green: TokenState[];
   blue: TokenState[];
   yellow: TokenState[];
 }
 
-interface GameState {
+export interface GameState {
   diceValue: number;
   lastRolledBy: string;
-  turn: 'red' | 'green' | 'blue' | 'yellow';
+  turn: PlayerColor;
   tokens: PlayerTokens;
+  consecutiveSixes: number;
+  matchStatus: 'waiting' | 'active' | 'finished';
   winner: string | null;
 }
 
+export interface ThemeConfig {
+  id: string;
+  name: string;
+  bgWrap: string;
+  vignette: string;
+  boardStyle: string;
+  diceBg: string;
+  effectName: string;
+  ambientSoundUrl: string;
+  baseStyle: string;
+  pathStyle: string;
+  centerStyle: string;
+  tileHighlight: string;
+  tokenGlow: string;
+}
+
 // ====================================================================================
-// 🎬 ULTIMATE CINEMATIC REALISTIC THEMES ARCHITECTURE (Zero Cartoons, Pure Realism)
+// 2. CINEMATIC REALISTIC THEMES CONFIGURATION (100% Realism, Zero Cartoons)
 // ====================================================================================
-const CINEMATIC_THEMES = [
+
+const CINEMATIC_THEMES: ThemeConfig[] = [
   { 
     id: 'egyptian', 
     name: '🏜️ Ancient Sandstone Vault', 
@@ -45,7 +80,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-stone-900 border-yellow-700 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-stone-900/95 border-yellow-800/70',
     centerStyle: 'bg-gradient-to-br from-yellow-800 to-stone-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-yellow-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-yellow-700 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_15px_rgba(234,179,8,0.8)]'
   },
   { 
     id: 'snow', 
@@ -59,7 +95,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-slate-900 border-sky-500 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-slate-950/95 border-sky-600/60',
     centerStyle: 'bg-gradient-to-br from-sky-600 to-slate-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-sky-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-sky-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_15px_rgba(56,189,248,0.9)]'
   },
   { 
     id: 'underwater', 
@@ -73,7 +110,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-slate-900 border-cyan-500 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-slate-950/95 border-cyan-700/60',
     centerStyle: 'bg-gradient-to-br from-cyan-700 to-slate-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-cyan-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-cyan-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_15px_rgba(6,182,212,0.9)]'
   },
   { 
     id: 'sky', 
@@ -87,7 +125,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-slate-900 border-indigo-400 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-slate-950/95 border-indigo-600/60',
     centerStyle: 'bg-gradient-to-br from-indigo-500 to-slate-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-indigo-500 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-indigo-500 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_15px_rgba(129,140,248,0.9)]'
   },
   { 
     id: 'fire', 
@@ -101,7 +140,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-stone-900 border-orange-600 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-stone-950/95 border-orange-700/70',
     centerStyle: 'bg-gradient-to-br from-orange-700 to-stone-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-orange-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-orange-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_18px_rgba(249,115,22,1)]'
   },
   { 
     id: 'forest', 
@@ -115,7 +155,8 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-stone-900 border-emerald-600 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-stone-950/95 border-emerald-700/60',
     centerStyle: 'bg-gradient-to-br from-emerald-700 to-stone-950 shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-emerald-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-emerald-600 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.9)]'
   },
   { 
     id: 'horror', name: '🧛 Gothic Blood Crypt', 
@@ -128,34 +169,77 @@ const CINEMATIC_THEMES = [
     baseStyle: 'bg-zinc-900 border-red-800 rounded-md shadow-[inset_0_0_60px_rgba(0,0,0,0.98)]',
     pathStyle: 'bg-zinc-950/95 border-red-900/70',
     centerStyle: 'bg-gradient-to-br from-red-950 to-black shadow-[inset_0_0_50px_rgba(0,0,0,0.98)]',
-    tileHighlight: 'bg-red-800 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]'
+    tileHighlight: 'bg-red-800 shadow-[inset_0_0_25px_rgba(0,0,0,0.95)]',
+    tokenGlow: 'shadow-[0_0_18px_rgba(239,68,68,1)]'
   }
 ];
 
 const initialTokensState: PlayerTokens = {
-  red: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  green: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  blue: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
+  red: [
+    { id: 1, position: -1, isHome: true, isSafeZone: true },
+    { id: 2, position: -1, isHome: true, isSafeZone: true },
+    { id: 3, position: -1, isHome: true, isSafeZone: true },
+    { id: 4, position: -1, isHome: true, isSafeZone: true }
+  ],
+  green: [
+    { id: 1, position: -1, isHome: true, isSafeZone: true },
+    { id: 2, position: -1, isHome: true, isSafeZone: true },
+    { id: 3, position: -1, isHome: true, isSafeZone: true },
+    { id: 4, position: -1, isHome: true, isSafeZone: true }
+  ],
+  blue: [
+    { id: 1, position: -1, isHome: true, isSafeZone: true },
+    { id: 2, position: -1, isHome: true, isSafeZone: true },
+    { id: 3, position: -1, isHome: true, isSafeZone: true },
+    { id: 4, position: -1, isHome: true, isSafeZone: true }
+  ],
+  yellow: [
+    { id: 1, position: -1, isHome: true, isSafeZone: true },
+    { id: 2, position: -1, isHome: true, isSafeZone: true },
+    { id: 3, position: -1, isHome: true, isSafeZone: true },
+    { id: 4, position: -1, isHome: true, isSafeZone: true }
+  ]
 };
+
+// ====================================================================================
+// 3. UTILITY FUNCTIONS & RENDERERS
+// ====================================================================================
 
 const renderCells = (count: number, renderFn: (index: number) => React.ReactNode) => {
   return Array.from({ length: count }).map((_, i) => renderFn(i));
 };
 
-const Token = ({ colorClass, onClick }: { colorClass: string, onClick?: () => void }) => (
+const Token = ({ colorClass, glowEffect, onClick }: { colorClass: string, glowEffect: string, onClick?: () => void }) => (
   <div 
     onClick={onClick}
-    className={`w-[80%] h-[80%] rounded-full ${colorClass} shadow-[0_12px_18px_rgba(0,0,0,1),inset_0_-6px_8px_rgba(0,0,0,0.95),inset_0_6px_8px_rgba(255,255,255,0.95)] border-2 border-black transform hover:scale-110 transition-transform cursor-pointer relative`}
-  ></div>
+    className={`w-[80%] h-[80%] rounded-full ${colorClass} ${glowEffect} shadow-[0_12px_18px_rgba(0,0,0,1),inset_0_-6px_8px_rgba(0,0,0,0.95),inset_0_6px_8px_rgba(255,255,255,0.95)] border-2 border-black transform hover:scale-110 transition-transform cursor-pointer relative flex items-center justify-center`}
+  >
+    <div className="w-2 h-2 bg-white/60 rounded-full blur-[0.5px]"></div>
+  </div>
 );
 
-const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: {outerClass: string, tokenColor: string, tokens: TokenState[], playerColor: keyof PlayerTokens, onTokenClick?: (player: keyof PlayerTokens, tokenId: number) => void}) => (
+const Base = ({ 
+  outerClass, 
+  tokenColor, 
+  tokens, 
+  playerColor, 
+  themeGlow,
+  onTokenClick 
+}: {
+  outerClass: string, 
+  tokenColor: string, 
+  tokens: TokenState[], 
+  playerColor: PlayerColor, 
+  themeGlow: string,
+  onTokenClick?: (player: PlayerColor, tokenId: number) => void
+}) => (
   <div className={`p-3.5 sm:p-4.5 flex items-center justify-center ${outerClass} relative border-[3.5px] border-black overflow-hidden`}>
     <div className="w-full h-full bg-black/90 backdrop-blur-xl rounded-sm p-3 grid grid-cols-2 gap-3 shadow-[inset_0_15px_30px_rgba(0,0,0,1)] border border-white/20 relative z-10">
       {tokens.map((token) => (
         <div key={token.id} className="rounded-full bg-black shadow-[inset_0_12px_24px_rgba(0,0,0,1)] border border-white/30 flex items-center justify-center relative overflow-hidden">
-           <Token colorClass={tokenColor} onClick={() => onTokenClick && onTokenClick(playerColor, token.id)} />
+           {token.position === -1 && (
+             <Token colorClass={tokenColor} glowEffect={themeGlow} onClick={() => onTokenClick && onTokenClick(playerColor, token.id)} />
+           )}
         </div>
       ))}
     </div>
@@ -168,7 +252,19 @@ const Tile = ({ colorClass, hasStar }: {colorClass: string, hasStar: boolean}) =
   </div>
 );
 
-const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameState: GameState, onTokenClick: (player: keyof PlayerTokens, tokenId: number) => void }) => {
+// ====================================================================================
+// 4. BOARD COMPONENT
+// ====================================================================================
+
+const LudoBoardVisual = ({ 
+  theme, 
+  gameState, 
+  onTokenClick 
+}: { 
+  theme: ThemeConfig, 
+  gameState: GameState, 
+  onTokenClick: (player: PlayerColor, tokenId: number) => void 
+}) => {
   return (
     <div className={`w-full max-w-[360px] aspect-square p-4 rounded-2xl border-[8px] ${theme.boardStyle} relative select-none overflow-hidden transition-all duration-700`}>
       
@@ -177,7 +273,14 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
       <div className={`w-full h-full ${theme.baseStyle} border-[3px] border-black grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] gap-0 overflow-hidden relative z-10 transition-all duration-700`}>
         
         {/* Red Base */}
-        <Base outerClass="bg-red-950" tokenColor="bg-red-600" tokens={gameState.tokens.red} playerColor="red" onTokenClick={onTokenClick} />
+        <Base 
+          outerClass="bg-red-950" 
+          tokenColor="bg-red-600" 
+          tokens={gameState.tokens.red} 
+          playerColor="red" 
+          themeGlow={theme.tokenGlow}
+          onTokenClick={onTokenClick} 
+        />
         
         <div className={`grid grid-cols-3 grid-rows-6 ${theme.pathStyle} z-0 relative transition-all duration-500`}>
           {renderCells(18, (i) => {
@@ -191,7 +294,14 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Green Base */}
-        <Base outerClass="bg-emerald-950" tokenColor="bg-emerald-600" tokens={gameState.tokens.green} playerColor="green" onTokenClick={onTokenClick} />
+        <Base 
+          outerClass="bg-emerald-950" 
+          tokenColor="bg-emerald-600" 
+          tokens={gameState.tokens.green} 
+          playerColor="green" 
+          themeGlow={theme.tokenGlow}
+          onTokenClick={onTokenClick} 
+        />
 
         {/* Path Left */}
         <div className={`grid grid-cols-6 grid-rows-3 ${theme.pathStyle} z-0 relative transition-all duration-500`}>
@@ -205,7 +315,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
           })}
         </div>
         
-        {/* Center Home */}
+        {/* Center Home Destination */}
         <div className={`relative border-[3px] border-black ${theme.centerStyle} overflow-hidden z-10 flex items-center justify-center transition-all duration-700`}>
           <div className="absolute inset-0 bg-black/60"></div>
           <svg viewBox="0 0 100 100" className="w-[100%] h-[100%] opacity-95 drop-shadow-[0_12px_24px_rgba(0,0,0,1)]">
@@ -229,7 +339,14 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Blue Base */}
-        <Base outerClass="bg-blue-950" tokenColor="bg-blue-600" tokens={gameState.tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
+        <Base 
+          outerClass="bg-blue-950" 
+          tokenColor="bg-blue-600" 
+          tokens={gameState.tokens.blue} 
+          playerColor="blue" 
+          themeGlow={theme.tokenGlow}
+          onTokenClick={onTokenClick} 
+        />
 
         <div className={`grid grid-cols-3 grid-rows-6 ${theme.pathStyle} z-0 relative transition-all duration-500`}>
           {renderCells(18, (i) => {
@@ -243,11 +360,22 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
         </div>
 
         {/* Yellow Base */}
-        <Base outerClass="bg-amber-950" tokenColor="bg-amber-600" tokens={gameState.tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
+        <Base 
+          outerClass="bg-amber-950" 
+          tokenColor="bg-amber-600" 
+          tokens={gameState.tokens.yellow} 
+          playerColor="yellow" 
+          themeGlow={theme.tokenGlow}
+          onTokenClick={onTokenClick} 
+        />
       </div>
     </div>
   );
 };
+
+// ====================================================================================
+// 5. MAIN CONTAINER COMPONENT
+// ====================================================================================
 
 const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   const [gameState, setGameState] = useState<GameState>({
@@ -273,9 +401,15 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         setGameState(docSnap.data() as GameState);
       } else {
         try {
-          await setDoc(gameDocRef, { diceValue: 1, lastRolledBy: '', turn: 'red', tokens: initialTokensState, winner: null });
+          await setDoc(gameDocRef, { 
+            diceValue: 1, 
+            lastRolledBy: '', 
+            turn: 'red', 
+            tokens: initialTokensState, 
+            winner: null 
+          });
         } catch (e) {
-          console.log("Firebase Error:", e);
+          console.error("Firebase Initialization Exception:", e);
         }
       }
     });
@@ -291,7 +425,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
       const audio = new Audio(activeTheme.ambientSoundUrl);
       audio.loop = true;
       audio.volume = 0.4;
-      audio.play().catch(e => console.log("Ambient audio blocked:", e));
+      audio.play().catch(e => console.log("Ambient Audio Playback Intercepted:", e));
       ambientAudioRef.current = audio;
     }
     return () => {
@@ -311,9 +445,9 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
       
       const sound = new Audio(url);
       sound.volume = 0.9;
-      sound.play().catch(e => console.log("SFX error:", e));
+      sound.play().catch(e => console.log("SFX Playback Exception:", e));
     } catch (e) {
-      console.log("Audio exception", e);
+      console.error("Audio Controller Error:", e);
     }
   };
 
@@ -340,7 +474,13 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     try {
       await updateDoc(gameDocRef, { diceValue: randomNum, lastRolledBy: currentUser.username });
     } catch (error) {
-      await setDoc(gameDocRef, { diceValue: randomNum, lastRolledBy: currentUser.username, turn: gameState.turn, tokens: gameState.tokens, winner: null });
+      await setDoc(gameDocRef, { 
+        diceValue: randomNum, 
+        lastRolledBy: currentUser.username, 
+        turn: gameState.turn, 
+        tokens: gameState.tokens, 
+        winner: null 
+      });
     }
     
     setTimeout(() => {
@@ -351,11 +491,11 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     }, 1200);
   };
 
-  const handleTokenClick = async (playerColor: keyof PlayerTokens, tokenId: number) => {
+  const handleTokenClick = async (playerColor: PlayerColor, tokenId: number) => {
     if (!currentUser || !roomId) return;
     playSfx('move');
 
-    const updatedTokens = { ...gameState.tokens };
+    const updatedTokens = JSON.parse(JSON.stringify(gameState.tokens)) as PlayerTokens;
     const tokenList = updatedTokens[playerColor];
     const tokenIndex = tokenList.findIndex(t => t.id === tokenId);
     
@@ -370,22 +510,24 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     } else {
       token.position += gameState.diceValue;
       if (token.position >= 56) {
-        token.position = 99;
+        token.position = 99; // Finished Goal
       }
     }
 
+    const nextTurnValue = gameState.diceValue === 6 ? gameState.turn : getNextTurn(gameState.turn);
     const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
+    
     try {
       await updateDoc(gameDocRef, { 
         tokens: updatedTokens,
-        turn: gameState.diceValue === 6 ? gameState.turn : getNextTurn(gameState.turn)
+        turn: nextTurnValue
       });
     } catch (e) {
-      console.log("Token movement sync error:", e);
+      console.error("Firebase Batch Sync Exception:", e);
     }
   };
 
-  const getNextTurn = (currentTurn: string): 'red' | 'green' | 'blue' | 'yellow' => {
+  const getNextTurn = (currentTurn: PlayerColor): PlayerColor => {
     if (currentTurn === 'red') return 'green';
     if (currentTurn === 'green') return 'blue';
     if (currentTurn === 'blue') return 'yellow';
@@ -424,6 +566,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   return (
     <div className={`flex flex-col items-center justify-center p-4 bg-gradient-to-br ${activeTheme.bgWrap} rounded-3xl w-full border-[3.5px] border-white/25 ${activeTheme.vignette} relative overflow-hidden transition-colors duration-700`}>
       
+      {/* Top Header Controls */}
       <div className="w-full flex items-center justify-between pb-2.5 px-1 mb-1 border-b border-white/10">
         <span className="text-[10px] text-amber-400 font-extrabold uppercase tracking-widest drop-shadow">
           TURN: {gameState.turn.toUpperCase()}
@@ -440,6 +583,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
+      {/* Cinematic Theme Selector Bar */}
       <div className="w-full flex overflow-x-auto gap-2.5 pb-3 mb-2 scrollbar-hide snap-x">
         {CINEMATIC_THEMES.map(theme => (
           <button 
@@ -457,6 +601,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
           {gameState.lastRolledBy ? `ROLLED BY: @${gameState.lastRolledBy}` : 'ENTER THE REALISTIC REALM'}
         </span>
         
+        {/* Dice Rendering Area */}
         <div className={`w-20 h-20 ${activeTheme.diceBg} rounded-2xl flex items-center justify-center mb-4 border-[3px] relative overflow-hidden transform transition-all duration-500 ${isRolling ? 'animate-spin scale-110' : ''}`}>
           {renderDiceDots(displayFace)}
         </div>
@@ -470,6 +615,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
+      {/* Board Visual Component */}
       <div className="w-full flex justify-center mt-2 pb-2 relative z-20 drop-shadow-[0_35px_60px_rgba(0,0,0,1)]">
         <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenClick} />
       </div>
