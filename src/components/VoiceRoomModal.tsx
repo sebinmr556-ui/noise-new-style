@@ -65,6 +65,8 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { YouTubeWatchTogether } from './YouTubeWatchTogether';
+// അഗോറയുടെ ഫയൽ ഇംപോർട്ട് ചെയ്യുന്നു
+import { useAgoraAudio } from '../utils/useAgoraAudio';
 
 interface VoiceRoomModalProps {
   room: VoiceRoom;
@@ -156,6 +158,14 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [hasRaisedHand, setHasRaisedHand] = useState(false);
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
+
+  // ഇവിടെയാണ് അഗോറ വോയ്‌സ് കണക്ട് ആവുന്നത്
+  useAgoraAudio(
+    roomId, 
+    isSpeaker, 
+    isMuted, 
+    currentUser?.uid || `guest_${Math.floor(Math.random() * 10000)}`
+  );
 
   // UI sheets and modals
   const [showAudienceSheet, setShowAudienceSheet] = useState(false);
