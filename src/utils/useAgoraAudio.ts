@@ -17,7 +17,7 @@ export function useAgoraAudio(
 
     const initAgora = async () => {
       // ശ്രദ്ധിക്കുക: ഇവിടെ നിങ്ങളുടെ യഥാർത്ഥ Agora App ID കൊടുക്കണം
-      const appId = "YOUR_AGORA_APP_ID"; 
+      const appId = "e21e0ed62adc4f7786c81754997bf42d"; 
       
       try {
         // റൂമിലേക്ക് കണക്ട് ചെയ്യുന്നു
