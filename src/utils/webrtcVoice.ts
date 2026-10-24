@@ -109,6 +109,7 @@ export class WebRTCVoiceManager {
   private remoteAnalyser: AnalyserNode | null = null;
   private animFrameId: number | null = null;
   private remoteAudioElement: HTMLAudioElement | null = null;
+  private pendingCandidates: RTCIceCandidateInit[] = [];
 
   constructor(callbacks?: WebRTCVoiceCallbacks) {
     if (callbacks) this.callbacks = callbacks;
@@ -338,6 +339,7 @@ export class WebRTCVoiceManager {
             sdp: callData.offer.sdp,
           })
         );
+        await this.drainPendingCandidates();
       }
 
       // 5. Create Answer
@@ -471,7 +473,24 @@ export class WebRTCVoiceManager {
         this.remoteStream = event.streams[0];
         if (this.remoteAudioElement) {
           this.remoteAudioElement.srcObject = event.streams[0];
-          this.remoteAudioElement.play().catch((e) => console.warn('Audio auto-play notice:', e));
+          const playPromise = this.remoteAudioElement.play();
+          if (playPromise !== undefined) {
+            playPromise.catch((e) => {
+              console.warn('Audio auto-play policy notice (will unlock on user touch/click):', e);
+              const unlockAudio = () => {
+                if (this.remoteAudioElement && this.remoteStream) {
+                  this.remoteAudioElement.play().catch(() => {});
+                }
+                if (this.audioCtx && this.audioCtx.state === 'suspended') {
+                  this.audioCtx.resume().catch(() => {});
+                }
+                window.removeEventListener('click', unlockAudio);
+                window.removeEventListener('touchstart', unlockAudio);
+              };
+              window.addEventListener('click', unlockAudio, { once: true });
+              window.addEventListener('touchstart', unlockAudio, { once: true });
+            });
+          }
         }
         this.setupRemoteAudioAnalyser(event.streams[0]);
         this.callbacks.onRemoteStream?.(event.streams[0]);
@@ -533,6 +552,7 @@ export class WebRTCVoiceManager {
               sdp: data.answer.sdp,
             })
           );
+          await this.drainPendingCandidates();
           this.setStatus('connected');
         } catch (e) {
           console.warn('Error setting remote answer:', e);
@@ -553,6 +573,20 @@ export class WebRTCVoiceManager {
     });
   }
 
+  private async drainPendingCandidates() {
+    if (!this.pc || !this.pc.remoteDescription) return;
+    while (this.pendingCandidates.length > 0) {
+      const cand = this.pendingCandidates.shift();
+      if (cand && this.pc) {
+        try {
+          await this.pc.addIceCandidate(cand);
+        } catch (e) {
+          console.warn('Error applying queued candidate:', e);
+        }
+      }
+    }
+  }
+
   private async handleRemoteAnswer(answer: { type: 'answer'; sdp: string }) {
     if (this.pc && this.pc.signalingState !== 'stable') {
       try {
@@ -562,6 +596,7 @@ export class WebRTCVoiceManager {
             sdp: answer.sdp,
           })
         );
+        await this.drainPendingCandidates();
         this.setStatus('connected');
       } catch (e) {
         console.warn('Error applying broadcast answer:', e);
@@ -570,15 +605,18 @@ export class WebRTCVoiceManager {
   }
 
   private async addRemoteCandidate(candData: any) {
-    if (!this.pc || !candData || !candData.candidate) return;
+    if (!candData || !candData.candidate) return;
+    const candidateInit: RTCIceCandidateInit = {
+      candidate: candData.candidate,
+      sdpMid: candData.sdpMid,
+      sdpMLineIndex: candData.sdpMLineIndex,
+    };
+    if (!this.pc || !this.pc.remoteDescription || !this.pc.remoteDescription.type) {
+      this.pendingCandidates.push(candidateInit);
+      return;
+    }
     try {
-      await this.pc.addIceCandidate(
-        new RTCIceCandidate({
-          candidate: candData.candidate,
-          sdpMid: candData.sdpMid,
-          sdpMLineIndex: candData.sdpMLineIndex,
-        })
-      );
+      await this.pc.addIceCandidate(new RTCIceCandidate(candidateInit));
     } catch (e) {
       console.warn('Error adding ICE candidate:', e);
     }
@@ -678,6 +716,7 @@ export class WebRTCVoiceManager {
   }
 
   private cleanupPeerConnection() {
+    this.pendingCandidates = [];
     if (this.pc) {
       try {
         this.pc.onicecandidate = null;

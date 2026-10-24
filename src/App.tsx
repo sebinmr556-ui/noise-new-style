@@ -16,9 +16,21 @@ import {
   orderBy, 
   updateDoc,
   doc,
-  onSnapshot
+  onSnapshot,
+  arrayUnion
 } from './firebase';
-import { AppUser, Post, Story, NavTab, CommentItem, VoiceRoom, RoomParticipant, PublicUserProfile } from './types';
+import { 
+  AppUser, 
+  Post, 
+  Story, 
+  NavTab, 
+  CommentItem, 
+  VoiceRoom, 
+  RoomParticipant, 
+  PublicUserProfile,
+  VoiceRoomSeat,
+  RoomYouTubeState
+} from './types';
 import { 
   AppNavState, 
   parseUrlToNavState, 
@@ -29,6 +41,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { syncUserToDatabase, getRegisteredUserById, toggleFollowInDatabase } from './utils/userSearch';
 import { StoriesBar } from './components/StoriesBar';
 import { StoryViewerModal } from './components/StoryViewerModal';
+import { StoryUploadModal } from './components/StoryUploadModal';
 import { PostCard } from './components/PostCard';
 import { CommentsModal } from './components/CommentsModal';
 import { UploadView } from './components/UploadView';
@@ -113,6 +126,8 @@ export default function App() {
 
   const [stories, setStories] = useState<Story[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(initialNav.storyIndex !== undefined ? initialNav.storyIndex : null);
+  const [isStoryUploadOpen, setIsStoryUploadOpen] = useState(false);
+  const [storyInitialFile, setStoryInitialFile] = useState<File | null>(null);
   const [activeCommentPost, setActiveCommentPost] = useState<Post | null>(null);
   const [selectedDetailPost, setSelectedDetailPost] = useState<Post | null>(null);
 
@@ -225,6 +240,9 @@ export default function App() {
     } else if (isNotificationsOpen) {
       setIsNotificationsOpen(false);
       pushNav({ isNotificationsOpen: false }, true);
+    } else if (isStoryUploadOpen) {
+      setIsStoryUploadOpen(false);
+      setStoryInitialFile(null);
     } else if (activeStoryIndex !== null) {
       setActiveStoryIndex(null);
       pushNav({ storyIndex: null }, true);
@@ -523,8 +541,23 @@ export default function App() {
 
     const unsubStories = onSnapshot(query(collection(db, 'stories'), orderBy('createdAt', 'desc')), (snapshot) => {
       const loaded: Story[] = [];
+      const now = Date.now();
       snapshot.forEach((docSnap) => {
         const data = docSnap.data();
+        const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : now);
+        const expiresAt = typeof data.expiresAt === 'number' ? data.expiresAt : (createdAt + 24 * 60 * 60 * 1000);
+
+        // Genuine 24-hour expiration: skip expired stories
+        if (now >= expiresAt) {
+          return;
+        }
+
+        const isVideo = data.mediaType === 'video' ||
+          data.mediaUrl?.startsWith('data:video') ||
+          data.mediaUrl?.includes('.mp4') ||
+          data.mediaUrl?.includes('.webm') ||
+          data.mediaUrl?.includes('.mov');
+
         loaded.push({
           id: docSnap.id,
           uid: data.uid || data.userId,
@@ -533,10 +566,13 @@ export default function App() {
           username: data.username || 'user',
           avatar: data.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(data.username || 'User')}&background=000&color=fff`,
           mediaUrl: data.mediaUrl,
+          mediaType: isVideo ? 'video' : 'image',
           caption: data.caption || '',
           timestamp: 'Recent',
           hasSeen: false,
-        });
+          createdAt,
+          expiresAt,
+        } as any);
       });
       setStories(loaded);
     });
@@ -558,7 +594,7 @@ export default function App() {
         }
 
         const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : (typeof data.createdAt === 'number' ? data.createdAt : now);
-        const expiresAt = typeof data.expiresAt === 'number' ? data.expiresAt : (createdAt + 30 * 60 * 1000);
+        const expiresAt = typeof data.expiresAt === 'number' ? data.expiresAt : (createdAt + 24 * 60 * 60 * 1000);
 
         // Auto-delete / filter out expired or inactive rooms
         if (now >= expiresAt || data.isLive === false) {
@@ -570,12 +606,22 @@ export default function App() {
           id: docSnap.id,
           title: data.title || 'Live Voice Room',
           topic: data.topic || 'Casual Hangout',
+          description: data.description || '',
+          announcement: data.announcement || '',
           hostUid: data.hostUid,
           hostUsername: data.hostUsername || 'user',
           hostDisplayName: data.hostDisplayName || 'User',
           hostAvatar: data.hostAvatar || '',
           speakers: Array.isArray(data.speakers) ? data.speakers : [],
           listeners: Array.isArray(data.listeners) ? data.listeners : [],
+          seats: Array.isArray(data.seats) ? data.seats : undefined,
+          speakingRequests: Array.isArray(data.speakingRequests) ? data.speakingRequests : [],
+          coAdmins: Array.isArray(data.coAdmins) ? data.coAdmins : [],
+          roles: data.roles || { [data.hostUid]: 'owner' },
+          youtubeState: data.youtubeState,
+          roomType: data.roomType || 'vip_lounge',
+          roomTheme: data.roomTheme || 'luxury',
+          seatCount: data.seatCount || 10,
           tags: Array.isArray(data.tags) ? data.tags : [],
           ambientVibe: data.ambientVibe || 'none',
           isLive: data.isLive !== false,
@@ -985,51 +1031,14 @@ export default function App() {
       setIsLoginModalOpen(true);
       return;
     }
-    const senderUid = auth?.currentUser?.uid || currentUser.uid;
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,video/*';
-    input.onchange = async (e: any) => {
+    input.accept = 'image/*,video/*,video/mp4,video/webm,video/quicktime,video/x-m4v';
+    input.onchange = (e: any) => {
       const file = e.target.files?.[0];
       if (file) {
-        setIsTopLoading(true);
-        try {
-          const base64 = await fileToBase64(file);
-          const localStoryId = `story-${Date.now()}`;
-          const newStory: Story = {
-            id: localStoryId,
-            uid: senderUid,
-            userId: senderUid,
-            authorId: senderUid,
-            username: currentUser.username,
-            avatar: currentUser.photoURL,
-            mediaUrl: base64,
-            caption: 'My moment ✨',
-            timestamp: 'Just now',
-            hasSeen: false,
-          };
-          setStories(prev => [newStory, ...prev]);
-
-          if (isFirebaseConfigured && db) {
-            try {
-              const docRef = await addDoc(collection(db, 'stories'), {
-                uid: senderUid,
-                userId: senderUid,
-                authorId: senderUid,
-                username: currentUser.username,
-                avatar: currentUser.photoURL || '',
-                mediaUrl: base64,
-                caption: 'My moment ✨',
-                createdAt: serverTimestamp(),
-              });
-              setStories(prev => prev.map(s => s.id === localStoryId ? { ...s, id: docRef.id } : s));
-            } catch (err) {
-              console.error('Failed to save story to Firestore:', err);
-            }
-          }
-        } finally {
-          setIsTopLoading(false);
-        }
+        setStoryInitialFile(file);
+        setIsStoryUploadOpen(true);
       }
     };
     input.click();
@@ -1059,8 +1068,8 @@ export default function App() {
   }) => {
     if (!currentUser) return;
     const now = Date.now();
-    // Configure explicit 30-minute expiration rule for automatic deletion
-    const expiresAt = now + 30 * 60 * 1000;
+    // Configure intentional 24-hour expiration policy for chat rooms
+    const expiresAt = now + 24 * 60 * 60 * 1000;
     const roomId = `room-${now}-${Math.random().toString(36).substring(2, 7)}`;
 
     const hostParticipant: RoomParticipant = {
@@ -1075,16 +1084,49 @@ export default function App() {
       joinedAt: now,
       seatNumber: 1,
     };
+
+    // 10 real social voice seats: Seat 1 is owner/host, Seats 2-10 are open seats
+    const initialSeats: VoiceRoomSeat[] = [
+      { seatNumber: 1, isLocked: false, user: hostParticipant },
+      ...Array.from({ length: 9 }, (_, i) => ({
+        seatNumber: i + 2,
+        isLocked: false,
+        user: null,
+      }))
+    ];
+
+    const initialYouTubeState: RoomYouTubeState = {
+      videoId: '',
+      title: '',
+      thumbnail: '',
+      playbackState: 'stopped',
+      positionSeconds: 0,
+      updatedAt: now,
+      queue: [],
+      allowVisitorSuggest: true,
+      allowCoAdminControl: true,
+    };
+
     const newRoom: VoiceRoom = {
       id: roomId,
       title: roomData.title,
       topic: roomData.topic,
+      description: `Welcome to ${roomData.title}! Connect your voice, listen to friends, and watch YouTube together.`,
+      announcement: `Welcome to our social room! Tap any open seat to request speaking or tap YouTube above to watch videos together.`,
       hostUid: currentUser.uid,
       hostUsername: currentUser.username,
       hostDisplayName: currentUser.displayName,
       hostAvatar: currentUser.photoURL,
       speakers: [hostParticipant],
       listeners: [],
+      seats: initialSeats,
+      speakingRequests: [],
+      coAdmins: [],
+      roles: { [currentUser.uid]: 'owner' },
+      youtubeState: initialYouTubeState,
+      roomType: roomData.roomType || 'vip_lounge',
+      roomTheme: roomData.roomTheme || 'luxury',
+      seatCount: 10,
       tags: roomData.tags,
       ambientVibe: roomData.ambientVibe,
       isLive: true,
@@ -1100,12 +1142,22 @@ export default function App() {
           id: roomId,
           title: roomData.title,
           topic: roomData.topic,
+          description: newRoom.description,
+          announcement: newRoom.announcement,
           hostUid: currentUser.uid,
           hostUsername: currentUser.username,
           hostDisplayName: currentUser.displayName,
           hostAvatar: currentUser.photoURL || '',
           speakers: [hostParticipant],
           listeners: [],
+          seats: initialSeats,
+          speakingRequests: [],
+          coAdmins: [],
+          roles: { [currentUser.uid]: 'owner' },
+          youtubeState: initialYouTubeState,
+          roomType: roomData.roomType || 'vip_lounge',
+          roomTheme: roomData.roomTheme || 'luxury',
+          seatCount: 10,
           tags: roomData.tags,
           ambientVibe: roomData.ambientVibe,
           isLive: true,
@@ -1125,15 +1177,48 @@ export default function App() {
     pushNav({ voiceRoomId: newRoom.id, isVoiceRoomsListOpen: false });
   };
 
-  // 🔥 Chatroom List-ൽ നിന്ന് റൂമിൽ കയറുമ്പോൾ:
+  // Chatroom List-ൽ നിന്ന് റൂമിൽ കയറുമ്പോൾ:
   const handleJoinVoiceRoom = (room: VoiceRoom) => {
     setIsVoiceRoomsListOpen(false);
     setActiveVoiceRoom(room);
     setIsVoiceRoomModalOpen(true);
     pushNav({ isVoiceRoomsListOpen: false, voiceRoomId: room.id });
+
+    // Sync user presence to listeners if not already a speaker
+    if (currentUser && db && isFirebaseConfigured) {
+      const isAlreadySpeaker = (room.speakers || []).some(s => s.uid === currentUser.uid);
+      const isAlreadyListener = (room.listeners || []).some(l => l.uid === currentUser.uid);
+      if (!isAlreadySpeaker && !isAlreadyListener) {
+        const listenerItem: RoomParticipant = {
+          uid: currentUser.uid,
+          username: currentUser.username,
+          displayName: currentUser.displayName,
+          avatar: currentUser.photoURL,
+          isHost: false,
+          isSpeaker: false,
+          isMuted: true,
+          isSpeaking: false,
+          joinedAt: Date.now(),
+        };
+        updateDoc(doc(db, 'voice_rooms', room.id), {
+          listeners: arrayUnion(listenerItem)
+        }).catch(() => {});
+      }
+    }
   };
 
   const handleLeaveVoiceRoom = () => {
+    if (activeVoiceRoom && currentUser && db && isFirebaseConfigured) {
+      // Remove from listeners if currently in listeners
+      const currentListeners = activeVoiceRoom.listeners || [];
+      const updatedListeners = currentListeners.filter(l => l.uid !== currentUser.uid);
+      if (updatedListeners.length !== currentListeners.length) {
+        updateDoc(doc(db, 'voice_rooms', activeVoiceRoom.id), {
+          listeners: updatedListeners
+        }).catch(() => {});
+      }
+    }
+
     setActiveVoiceRoom(null);
     setIsVoiceRoomModalOpen(false);
     setIsVoiceRoomsListOpen(true);
@@ -1688,6 +1773,20 @@ export default function App() {
             onOpenChatroom={handleOpenVoiceChatroomFromStory}
           />
         )}
+
+        <StoryUploadModal
+          isOpen={isStoryUploadOpen}
+          initialFile={storyInitialFile}
+          onClose={() => {
+            setIsStoryUploadOpen(false);
+            setStoryInitialFile(null);
+          }}
+          currentUser={currentUser}
+          onRequireLogin={() => setIsLoginModalOpen(true)}
+          onStoryPublished={(newStory) => {
+            setStories((prev) => [newStory, ...prev.filter((s) => s.id !== newStory.id)]);
+          }}
+        />
 
         {activeVoiceRoom && (
           <VoiceRoomModal

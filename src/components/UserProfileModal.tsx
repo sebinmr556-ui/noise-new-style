@@ -15,9 +15,12 @@ import {
   UserX, 
   Heart,
   Video,
-  Sparkles
+  Sparkles,
+  Phone
 } from 'lucide-react';
 import { PublicUserProfile, Post, AppUser } from '../types';
+import { db, isFirebaseConfigured } from '../firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 
 interface UserProfileModalProps {
   user: PublicUserProfile | null;
@@ -48,6 +51,54 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
   const [showBlockConfirmModal, setShowBlockConfirmModal] = useState(false);
+  const [isInCall, setIsInCall] = useState(false);
+
+  // Real-time listener to check if this user is currently engaged in an active WebRTC call
+  React.useEffect(() => {
+    if (!isFirebaseConfigured || !db || !user) {
+      setIsInCall(false);
+      return;
+    }
+    const targetUid = user.uid;
+    const targetUsername = (user.username || '').toLowerCase();
+
+    try {
+      const callsRef = collection(db, 'calls');
+      const q = query(callsRef, where('status', 'in', ['calling', 'ringing', 'connecting', 'connected']));
+
+      const unsub = onSnapshot(q, (snapshot) => {
+        const now = Date.now();
+        let active = false;
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const age = now - (data.createdAt || 0);
+          // Only consider calls created within the last 2 hours
+          if (age > 2 * 60 * 60 * 1000) return;
+
+          const callerUid = data.caller?.uid;
+          const receiverUid = data.receiver?.uid;
+          const callerName = (data.caller?.username || '').toLowerCase();
+          const receiverName = (data.receiver?.username || '').toLowerCase();
+
+          if (
+            callerUid === targetUid ||
+            receiverUid === targetUid ||
+            callerName === targetUsername ||
+            receiverName === targetUsername
+          ) {
+            active = true;
+          }
+        });
+        setIsInCall(active);
+      }, (err) => {
+        console.debug('Error checking user call status:', err);
+      });
+
+      return () => unsub();
+    } catch {
+      setIsInCall(false);
+    }
+  }, [user?.uid, user?.username]);
 
   if (!user) return null;
 
@@ -189,6 +240,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     className="w-full h-full rounded-full object-cover bg-zinc-950 p-[2px]"
                   />
                 </div>
+                {isInCall && (
+                  <div
+                    className="absolute -bottom-1 -right-1 flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white ring-2 ring-zinc-950 shadow-md animate-pulse"
+                    title="User is currently engaged in an active call"
+                  >
+                    <Phone className="w-3 h-3 fill-current" />
+                  </div>
+                )}
               </div>
 
               {/* Stats */}
@@ -232,6 +291,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <Copy className="w-2.5 h-2.5 text-zinc-500" />
                   )}
                 </button>
+
+                {/* Call In Progress Live Indicator */}
+                {isInCall && (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-[11px] font-semibold animate-pulse shadow-sm">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    <Phone className="w-3 h-3 fill-current" />
+                    <span>Call in progress</span>
+                  </div>
+                )}
               </div>
 
               {user.bio && (

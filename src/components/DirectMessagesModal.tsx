@@ -255,12 +255,59 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   const [localAudioLevel, setLocalAudioLevel] = useState(0);
   const [remoteAudioLevel, setRemoteAudioLevel] = useState(0);
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isPeerInCall, setIsPeerInCall] = useState(false);
 
   const voiceManagerRef = useRef<WebRTCVoiceManager | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const recordTimerRef = useRef<any>(null);
   const callTimerRef = useRef<any>(null);
+
+  // Listen for active calls for the selected contact in Firestore
+  useEffect(() => {
+    if (!isOpen || !selectedContact || !isFirebaseConfigured || !db) {
+      setIsPeerInCall(false);
+      return;
+    }
+    const targetUid = selectedContact.id;
+    const targetUsername = (selectedContact.username || '').toLowerCase();
+
+    try {
+      const callsRef = collection(db, 'calls');
+      const q = query(callsRef, where('status', 'in', ['calling', 'ringing', 'connecting', 'connected']));
+
+      const unsub = onSnapshot(q, (snapshot) => {
+        const now = Date.now();
+        let found = false;
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          const age = now - (data.createdAt || 0);
+          if (age > 2 * 60 * 60 * 1000) return;
+
+          const callerUid = data.caller?.uid;
+          const receiverUid = data.receiver?.uid;
+          const callerName = (data.caller?.username || '').toLowerCase();
+          const receiverName = (data.receiver?.username || '').toLowerCase();
+
+          if (
+            callerUid === targetUid ||
+            receiverUid === targetUid ||
+            callerName === targetUsername ||
+            receiverName === targetUsername
+          ) {
+            found = true;
+          }
+        });
+        setIsPeerInCall(found);
+      }, (err) => {
+        console.debug('Error listening to peer active calls:', err);
+      });
+
+      return () => unsub();
+    } catch {
+      setIsPeerInCall(false);
+    }
+  }, [isOpen, selectedContact?.id, selectedContact?.username]);
 
   // Auto-scroll to bottom of messages
   useEffect(() => {
@@ -734,6 +781,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
   useEffect(() => {
     if (!isFirebaseConfigured || !db || !currentUser) return;
     const myHandle = (currentUser.username || '').toLowerCase();
+    const myUid = currentUser.uid || '';
 
     try {
       const callsCol = collection(db, 'calls');
@@ -742,9 +790,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
         snapshot.docChanges().forEach((change) => {
           if (change.type === 'added' || change.type === 'modified') {
             const data = change.doc.data() as CallSessionData;
+            const isForMe = 
+              (myUid && data.receiver?.uid === myUid) ||
+              (myHandle && data.receiver?.username?.toLowerCase() === myHandle);
+
             if (
               data.status === 'calling' &&
-              data.receiver?.username?.toLowerCase() === myHandle &&
+              isForMe &&
               Date.now() - (data.createdAt || 0) < 60000 &&
               (!activeCall || activeCall.status === 'ended')
             ) {
@@ -766,9 +818,9 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
     } catch (e) {
       console.debug('Firestore incoming listener note:', e);
     }
-  }, [currentUser?.username, activeCall?.status, incomingCall?.id]);
+  }, [currentUser?.username, currentUser?.uid, activeCall?.status, incomingCall?.id]);
 
-  if (!isOpen) return null;
+  if (!isOpen && !incomingCall && !activeCall) return null;
 
   const handleSelectContact = (contact: ChatContact) => {
     if (activeCall && activeCall.user.id !== contact.id) {
@@ -1521,11 +1573,18 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                 </button>
                 <ContactAvatar contact={selectedContact} size="sm" className="ring-1 ring-zinc-700" />
                 <div className="min-w-0">
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <h4 className="text-xs font-bold text-white truncate leading-tight">{selectedContact.name}</h4>
                     {isVerifiedUser(selectedContact) && (
                       <span className="w-3 h-3 rounded-full bg-blue-500 text-white flex items-center justify-center text-[7px] flex-none">
                         ✓
+                      </span>
+                    )}
+                    {(Boolean(activeCall && ['calling', 'ringing', 'connecting', 'connected'].includes(activeCall.status) && activeCall.user.id === selectedContact.id) || isPeerInCall) && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-[9px] font-semibold flex-none animate-pulse">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <Phone className="w-2.5 h-2.5 fill-current" />
+                        <span>Call in progress{Boolean(activeCall && ['calling', 'ringing', 'connecting', 'connected'].includes(activeCall.status) && activeCall.user.id === selectedContact.id && activeCall.duration > 0) ? ` (${Math.floor((activeCall?.duration || 0) / 60).toString().padStart(2, '0')}:${((activeCall?.duration || 0) % 60).toString().padStart(2, '0')})` : ''}</span>
                       </span>
                     )}
                   </div>
@@ -1542,7 +1601,11 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               <div className="flex items-center gap-1 flex-none">
                 <button
                   onClick={() => startCall('audio')}
-                  className="p-1.5 text-zinc-300 hover:text-white hover:bg-zinc-900 rounded-lg transition-colors"
+                  className={`p-1.5 rounded-lg transition-colors ${
+                    Boolean(activeCall && ['calling', 'ringing', 'connecting', 'connected'].includes(activeCall.status) && activeCall.user.id === selectedContact.id)
+                      ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/50'
+                      : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                  }`}
                   type="button"
                   title="Voice Call"
                 >
@@ -1630,26 +1693,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </div>
             )}
 
-            <div className="px-3.5 py-2 bg-gradient-to-r from-purple-950/40 via-zinc-900/90 to-indigo-950/40 border-b border-zinc-800/80 flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse flex-none" />
-                <span className="text-zinc-200 font-medium truncate text-[11px]">
-                  Free Live WebRTC Voice Chat
-                </span>
-                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded text-[9px] bg-zinc-800 text-zinc-400 font-mono">
-                  Google STUN
-                </span>
-              </div>
-              <button
-                onClick={() => startCall('audio')}
-                className="px-2.5 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-[11px] font-bold flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer flex-none shadow-xs"
-                type="button"
-                title="Start Voice Chat with this user"
-              >
-                <Phone className="w-3 h-3 text-emerald-400" />
-                <span>Voice Call</span>
-              </button>
-            </div>
+
 
             {(validationError || dmsListenerError) && (
               <div className="bg-rose-500/15 border-b border-rose-500/30 px-3.5 py-2 flex items-center justify-between text-xs text-rose-300">
@@ -2002,7 +2046,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
                     {incomingCall.caller.displayName || incomingCall.caller.username}
                   </h4>
                   <p className="text-[10px] text-zinc-400 truncate">
-                    @{incomingCall.caller.username} • Free WebRTC P2P
+                    @{incomingCall.caller.username} • Voice Call
                   </p>
                 </div>
               </div>
@@ -2030,13 +2074,13 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
           </div>
         )}
 
-        {/* ACTIVE WEBRTC VOICE CALL OVERLAY */}
+        {/* ACTIVE VOICE CALL OVERLAY */}
         {activeCall && (
           <div className="absolute inset-0 z-50 bg-zinc-950/98 backdrop-blur-xl flex flex-col justify-between p-4 sm:p-6 text-center animate-in zoom-in-95 duration-200 overflow-y-auto">
             <div className="w-full flex items-center justify-between">
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>WebRTC Live Audio • Google STUN P2P</span>
+                <span>Voice Call • End-to-End Encrypted</span>
               </div>
               <button 
                 onClick={handleEndCall} 
@@ -2252,7 +2296,7 @@ export const DirectMessagesModal: React.FC<DirectMessagesModalProps> = ({
               </div>
 
               <p className="text-[10px] text-zinc-500 max-w-xs mx-auto">
-                🔒 Free peer-to-peer WebRTC audio encrypted end-to-end. Public Google STUN servers handle NAT traversal with zero paid dependencies.
+                🔒 Voice call encrypted end-to-end for clear, private audio.
               </p>
             </div>
           </div>

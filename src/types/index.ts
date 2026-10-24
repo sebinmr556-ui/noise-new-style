@@ -70,6 +70,8 @@ export interface Story {
   mediaType?: 'image' | 'video';
   isVerified?: boolean;
   mentionTag?: string;
+  createdAt?: number | any;
+  expiresAt?: number;
   sharedReel?: {
     id: string;
     username: string;
@@ -145,6 +147,46 @@ export interface InteractiveGame {
   result?: any;
 }
 
+export type RoomRole = 'super_admin' | 'owner' | 'co_admin' | 'visitor';
+
+export interface SpeakingRequest {
+  uid: string;
+  username: string;
+  displayName: string;
+  avatar?: string;
+  requestedAt: number;
+}
+
+export interface VoiceRoomSeat {
+  seatNumber: number; // 1 to 10
+  user: RoomParticipant | null;
+  isLocked: boolean;
+  isMuted?: boolean;
+}
+
+export interface YouTubeQueueItem {
+  id: string;
+  videoId: string;
+  title: string;
+  thumbnail: string;
+  duration?: string;
+  addedBy: string;
+  addedByUid: string;
+  addedAt: number;
+}
+
+export interface RoomYouTubeState {
+  videoId: string;
+  title: string;
+  thumbnail: string;
+  playbackState: 'playing' | 'paused' | 'stopped';
+  positionSeconds: number;
+  updatedAt: number; // server timestamp
+  queue: YouTubeQueueItem[];
+  allowVisitorSuggest: boolean;
+  allowCoAdminControl: boolean;
+}
+
 export interface VoiceRoom {
   id: string;
   title: string;
@@ -153,9 +195,19 @@ export interface VoiceRoom {
   hostUsername: string;
   hostDisplayName: string;
   hostAvatar?: string;
+  description?: string;
+  announcement?: string;
   speakers: RoomParticipant[];
   listeners: RoomParticipant[];
+  seats?: VoiceRoomSeat[];
+  speakingRequests?: SpeakingRequest[];
+  coAdmins?: string[]; // Array of UIDs
+  roles?: { [uid: string]: RoomRole };
+  youtubeState?: RoomYouTubeState;
   tags: string[];
+  roomType?: string;
+  roomTheme?: string;
+  seatCount?: number;
   ambientVibe?: 'none' | 'lofi' | 'rain' | 'cafe' | 'synth';
   isLive: boolean;
   createdAt: number;

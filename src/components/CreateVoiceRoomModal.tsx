@@ -67,6 +67,14 @@ const LUXURY_THEMES = [
 
 const ROOM_MODES = [
   {
+    id: 'vip_lounge' as const,
+    name: '10-Mic Social Room',
+    desc: '10 seats, stage podium, YouTube Watch Together & host controls',
+    icon: Crown,
+    seats: 10,
+    badge: 'Recommended'
+  },
+  {
     id: 'party_8' as const,
     name: '8-Mic Party',
     desc: '8 seats with audio waves & reactions',
@@ -76,23 +84,15 @@ const ROOM_MODES = [
   },
   {
     id: 'pk_battle' as const,
-    name: '1v1 PK Battle',
-    desc: 'Live head-to-head gifting challenge',
+    name: '2-Mic Live Lounge',
+    desc: 'Head-to-head live voice hangout',
     icon: Swords,
     seats: 2,
-    badge: 'Trending'
-  },
-  {
-    id: 'vip_lounge' as const,
-    name: '10-Mic VIP Club',
-    desc: 'Reserved premium seats & host controls',
-    icon: Crown,
-    seats: 10,
-    badge: 'Elite'
+    badge: 'Cozy'
   }
 ];
 
-const POPULAR_TAGS = ['Party', 'Singing', 'Chill', 'Gaming', 'Dating', 'PK Battle', 'Malayalam', 'Music'];
+const POPULAR_TAGS = ['Party', 'Singing', 'Chill', 'Gaming', 'Dating', 'YouTube', 'Malayalam', 'Music'];
 
 export const CreateVoiceRoomModal: React.FC<CreateVoiceRoomModalProps> = ({
   isOpen,
@@ -101,7 +101,7 @@ export const CreateVoiceRoomModal: React.FC<CreateVoiceRoomModalProps> = ({
   onCreateRoom,
 }) => {
   const [title, setTitle] = useState('');
-  const [selectedMode, setSelectedMode] = useState<'party_8' | 'pk_battle' | 'vip_lounge'>('party_8');
+  const [selectedMode, setSelectedMode] = useState<'party_8' | 'pk_battle' | 'vip_lounge'>('vip_lounge');
   const [selectedTheme, setSelectedTheme] = useState('supercar');
   const [selectedTags, setSelectedTags] = useState<string[]>(['Party', 'Chill']);
   const [ambientVibe, setAmbientVibe] = useState<'none' | 'lofi' | 'rain' | 'cafe' | 'synth'>('lofi');

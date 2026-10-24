@@ -30,8 +30,8 @@ export function getServerDb(): Firestore {
 }
 
 export const CHATROOM_CONFIG = {
-  // Lifetime of newly created chat rooms: 30 minutes before automatic deletion
-  TTL_MS: 30 * 60 * 1000,
+  // Lifetime of chat rooms before automatic expiration: 24 hours
+  TTL_MS: 24 * 60 * 60 * 1000,
   // Frequency of backend scheduled cleanup check: every 60 seconds
   CLEANUP_INTERVAL_MS: 60 * 1000,
 };
