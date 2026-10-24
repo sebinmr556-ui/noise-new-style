@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - CINEMATIC MULTIVERSE LUDO ENGINE (FULL RULES & CAPTURE LOGIC)
+ * NOISE / THE DIGITALIGHT - CINEMATIC MULTIVERSE LUDO ENGINE (DICE 1 & 6 OUT RULE)
  * ====================================================================================
  */
 
@@ -45,7 +45,6 @@ const initialTokensState: PlayerTokens = {
   yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
 };
 
-// Safe zones / Star tile indices where tokens are safe from being captured
 const SAFE_POSITIONS = [0, 8, 13, 21, 26, 34, 39, 47];
 
 const CINEMATIC_THEMES = [
@@ -111,9 +110,9 @@ const renderCells = (count: number, renderFn: (index: number) => React.ReactNode
   return Array.from({ length: count }).map((_, i) => renderFn(i));
 };
 
-const Token = ({ colorClass, onClick }: { colorClass: string, onClick?: () => void }) => (
-  <div onClick={onClick} className={`w-[75%] h-[75%] rounded-full ${colorClass} shadow-md border border-black cursor-pointer transform hover:scale-110 transition-transform flex items-center justify-center`}>
-    <div className="w-1.5 h-1.5 bg-white/60 rounded-full"></div>
+const Token = ({ colorClass, tokenId, onClick }: { colorClass: string, tokenId: number, onClick?: () => void }) => (
+  <div onClick={onClick} className={`w-[85%] h-[85%] rounded-full ${colorClass} shadow-[0_0_8px_rgba(255,255,255,0.8)] border-2 border-white cursor-pointer transform hover:scale-125 transition-transform flex items-center justify-center text-[9px] font-black text-white`}>
+    {tokenId}
   </div>
 );
 
@@ -121,11 +120,11 @@ const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: { o
   const safeTokens = tokens || [{id:1, position:-1, isHome:true},{id:2, position:-1, isHome:true},{id:3, position:-1, isHome:true},{id:4, position:-1, isHome:true}];
   return (
     <div className={`p-3 flex items-center justify-center ${outerClass} relative border-2 border-black overflow-hidden`}>
-      <div className="w-full h-full bg-black/80 rounded p-2 grid grid-cols-2 gap-2 border border-white/20">
+      <div className="w-full h-full bg-black/85 rounded p-2 grid grid-cols-2 gap-2 border border-white/20">
         {safeTokens.map(token => (
-          <div key={token.id} className="rounded-full bg-black flex items-center justify-center border border-white/30">
+          <div key={token.id} className="rounded-full bg-black/90 flex items-center justify-center border border-white/40 shadow-inner">
              {token.position === -1 && (
-               <Token colorClass={tokenColor} onClick={() => onTokenClick(playerColor, token.id)} />
+               <Token colorClass={tokenColor} tokenId={token.id} onClick={() => onTokenClick(playerColor, token.id)} />
              )}
           </div>
         ))}
@@ -144,11 +143,11 @@ const Tile = ({ colorClass, hasStar, tokensOnTile, onTokenClick }: { colorClass:
 
   return (
     <div className={`relative border border-black/70 ${colorClass} flex items-center justify-center overflow-hidden`}>
-      {hasStar && <span className="text-white/80 text-[10px] font-bold absolute z-0">★</span>}
+      {hasStar && <span className="text-white/90 text-[10px] font-bold absolute z-0">★</span>}
       <div className="absolute inset-0 flex flex-wrap items-center justify-center gap-0.5 z-10 p-0.5">
         {tokensOnTile && tokensOnTile.map(t => (
-          <div key={`${t.player}-${t.id}`} className="w-3.5 h-3.5 flex items-center justify-center">
-            <Token colorClass={colorMap[t.player]} onClick={() => onTokenClick(t.player, t.id)} />
+          <div key={`${t.player}-${t.id}`} className="w-5 h-5 flex items-center justify-center">
+            <Token colorClass={colorMap[t.player]} tokenId={t.id} onClick={() => onTokenClick(t.player, t.id)} />
           </div>
         ))}
       </div>
@@ -421,7 +420,8 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     if (!token) return;
 
     if (token.position === -1) {
-      if (gameState.diceValue === 6) {
+      // Allow token to come out if dice value is 1 or 6
+      if (gameState.diceValue === 1 || gameState.diceValue === 6) {
         token.position = 0;
         token.isHome = false;
         playSfx('move');
