@@ -1,10 +1,3 @@
-/**
- * ====================================================================================
- * PROJECT: NOISE / THE DIGITALIGHT - ULTIMATE MULTIVERSE CINEMATIC LUDO ENGINE
- * ARCHITECTURE: ENTERPRISE-GRADE REACT + TYPESCRIPT + FIREBASE SYNCHRONIZED SYSTEM
- * ====================================================================================
- */
-
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
 import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
@@ -15,34 +8,6 @@ interface LudoGameProps {
   currentUser: AppUser | null;
 }
 
-interface TokenState {
-  id: number;
-  position: number; // -1: Base, 0-51: Track, 99: Finished
-  isHome: boolean;
-}
-
-interface PlayerTokens {
-  red: TokenState[];
-  green: TokenState[];
-  blue: TokenState[];
-  yellow: TokenState[];
-}
-
-interface GameState {
-  diceValue: number;
-  lastRolledBy: string;
-  turn: 'red' | 'green' | 'blue' | 'yellow';
-  tokens: PlayerTokens;
-}
-
-const initialTokensState: PlayerTokens = {
-  red: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  green: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  blue: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}],
-  yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
-};
-
-// 7 CINEMATIC REALISTIC THEMES
 const CINEMATIC_THEMES = [
   { 
     id: 'egyptian', name: '🏜️ Pyramid', 
@@ -76,17 +41,6 @@ const CINEMATIC_THEMES = [
     pathStyle: 'bg-cyan-950/90',
     centerStyle: 'bg-cyan-600',
     tileHighlight: 'bg-cyan-500'
-  },
-  { 
-    id: 'sky', name: '☁️ Sky', 
-    bgWrap: 'from-indigo-950 via-sky-950 to-black', 
-    boardStyle: 'border-sky-200 bg-indigo-950',
-    diceBg: 'bg-gradient-to-br from-sky-200 to-blue-400 text-indigo-950',
-    effectName: 'Stratosphere Wind',
-    ambientSoundUrl: 'https://actions.google.com/sounds/v1/weather/wind_gust.ogg',
-    pathStyle: 'bg-sky-950/80',
-    centerStyle: 'bg-sky-300',
-    tileHighlight: 'bg-sky-500'
   },
   { 
     id: 'fire', name: '🔥 Fire', 
@@ -127,18 +81,16 @@ const renderCells = (count: number, renderFn: (index: number) => React.ReactNode
   return Array.from({ length: count }).map((_, i) => renderFn(i));
 };
 
-const Token = ({ colorClass, onClick }: { colorClass: string, onClick?: () => void }) => (
-  <div onClick={onClick} className={`w-[75%] h-[75%] rounded-full ${colorClass} shadow-[0_5px_10px_rgba(0,0,0,0.9)] border border-black cursor-pointer transform hover:scale-110 transition-transform`}></div>
+const Token = ({ colorClass }: { colorClass: string }) => (
+  <div className={`w-[75%] h-[75%] rounded-full ${colorClass} shadow-md border border-black`}></div>
 );
 
-const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: { outerClass: string, tokenColor: string, tokens: TokenState[], playerColor: 'red' | 'green' | 'blue' | 'yellow', onTokenClick: (p: 'red' | 'green' | 'blue' | 'yellow', id: number) => void }) => (
+const Base = ({ outerClass, tokenColor }: { outerClass: string, tokenColor: string }) => (
   <div className={`p-3 flex items-center justify-center ${outerClass} relative border-2 border-black overflow-hidden`}>
     <div className="w-full h-full bg-black/80 rounded p-2 grid grid-cols-2 gap-2 border border-white/20">
-      {tokens.map(token => (
-        <div key={token.id} className="rounded-full bg-black flex items-center justify-center border border-white/30">
-           {token.position === -1 && (
-             <Token colorClass={tokenColor} onClick={() => onTokenClick(playerColor, token.id)} />
-           )}
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} className="rounded-full bg-black flex items-center justify-center border border-white/30">
+           <Token colorClass={tokenColor} />
         </div>
       ))}
     </div>
@@ -151,12 +103,12 @@ const Tile = ({ colorClass, hasStar }: { colorClass: string, hasStar: boolean })
   </div>
 );
 
-const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameState: GameState, onTokenClick: (p: 'red' | 'green' | 'blue' | 'yellow', id: number) => void }) => {
+const LudoBoardVisual = ({ theme }: { theme: any }) => {
   return (
     <div className={`w-full max-w-[340px] aspect-square p-3 rounded-xl border-4 ${theme.boardStyle} relative shadow-2xl`}>
       <div className="w-full h-full border-2 border-black grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] overflow-hidden">
         
-        <Base outerClass="bg-red-950" tokenColor="bg-red-600" tokens={gameState.tokens.red} playerColor="red" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-red-950" tokenColor="bg-red-600" />
         <div className={`grid grid-cols-3 grid-rows-6 ${theme.pathStyle}`}>
           {renderCells(18, (i) => {
             const isHomeStretch = [4,7,10,13,16].includes(i);
@@ -166,7 +118,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             return <Tile key={`t-${i}`} colorClass={colorClass} hasStar={i === 6} />
           })}
         </div>
-        <Base outerClass="bg-emerald-950" tokenColor="bg-emerald-600" tokens={gameState.tokens.green} playerColor="green" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-emerald-950" tokenColor="bg-emerald-600" />
 
         <div className={`grid grid-cols-6 grid-rows-3 ${theme.pathStyle}`}>
           {renderCells(18, (i) => {
@@ -197,7 +149,7 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
           })}
         </div>
 
-        <Base outerClass="bg-blue-950" tokenColor="bg-blue-600" tokens={gameState.tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-blue-950" tokenColor="bg-blue-600" />
         <div className={`grid grid-cols-3 grid-rows-6 ${theme.pathStyle}`}>
           {renderCells(18, (i) => {
             const isHomeStretch = [1,4,7,10,13].includes(i);
@@ -207,21 +159,17 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             return <Tile key={`b-${i}`} colorClass={colorClass} hasStar={i === 11} />
           })}
         </div>
-        <Base outerClass="bg-amber-950" tokenColor="bg-amber-600" tokens={gameState.tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
+        <Base outerClass="bg-amber-950" tokenColor="bg-amber-600" />
       </div>
     </div>
   );
 };
 
 const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
-  const [gameState, setGameState] = useState<GameState>({
-    diceValue: 1,
-    lastRolledBy: '',
-    turn: 'red',
-    tokens: initialTokensState
-  });
-  const [isRolling, setIsRolling] = useState(false);
+  const [diceValue, setDiceValue] = useState<number>(1);
+  const [lastRolledBy, setLastRolledBy] = useState<string>('');
   const [activeThemeId, setActiveThemeId] = useState('egyptian');
+  const [isRolling, setIsRolling] = useState(false);
   const [displayFace, setDisplayFace] = useState(1);
   const [isSoundOn, setIsSoundOn] = useState(true);
 
@@ -231,15 +179,13 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   useEffect(() => {
     if (!roomId || !db) return;
     const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
-    const unsubscribe = onSnapshot(gameDocRef, async (docSnap) => {
+    const unsubscribe = onSnapshot(gameDocRef, (docSnap) => {
       if (docSnap.exists()) {
-        setGameState(docSnap.data() as GameState);
+        const data = docSnap.data();
+        if (data.diceValue) setDiceValue(data.diceValue);
+        if (data.lastRolledBy) setLastRolledBy(data.lastRolledBy);
       } else {
-        try {
-          await setDoc(gameDocRef, { diceValue: 1, lastRolledBy: '', turn: 'red', tokens: initialTokensState });
-        } catch (e) {
-          console.log("Firebase Error:", e);
-        }
+        setDoc(gameDocRef, { diceValue: 1, lastRolledBy: '' }).catch(e => console.log(e));
       }
     });
     return () => unsubscribe();
@@ -265,16 +211,14 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     };
   }, [activeThemeId, isSoundOn]);
 
-  const playSfx = (type: 'dice' | 'move') => {
+  const playSfx = () => {
     if (!isSoundOn) return;
     try {
-      let url = 'https://actions.google.com/sounds/v1/foley/rolling_dice_on_table.ogg';
-      if (type === 'move') url = 'https://actions.google.com/sounds/v1/foley/wood_click.ogg';
-      const sound = new Audio(url);
+      const sound = new Audio('https://actions.google.com/sounds/v1/foley/rolling_dice_on_table.ogg');
       sound.volume = 0.8;
-      sound.play().catch(e => console.log("SFX error:", e));
+      sound.play().catch(e => console.log(e));
     } catch (e) {
-      console.log("Audio error", e);
+      console.log(e);
     }
   };
 
@@ -285,53 +229,27 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         setDisplayFace(Math.floor(Math.random() * 6) + 1);
       }, 50);
     } else {
-      setDisplayFace(gameState.diceValue || 1);
+      setDisplayFace(diceValue);
     }
     return () => clearInterval(interval);
-  }, [isRolling, gameState.diceValue]);
+  }, [isRolling, diceValue]);
 
   const rollDice = async () => {
     if (!currentUser || !roomId || isRolling) return;
     
-    playSfx('dice');
+    playSfx();
     setIsRolling(true);
     
     const randomNum = Math.floor(Math.random() * 6) + 1;
     const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
+    
     try {
       await updateDoc(gameDocRef, { diceValue: randomNum, lastRolledBy: currentUser.username });
     } catch (error) {
-      await setDoc(gameDocRef, { diceValue: randomNum, lastRolledBy: currentUser.username, turn: gameState.turn, tokens: gameState.tokens });
+      await setDoc(gameDocRef, { diceValue: randomNum, lastRolledBy: currentUser.username });
     }
     
     setTimeout(() => setIsRolling(false), 900);
-  };
-
-  const handleTokenClick = async (playerColor: 'red' | 'green' | 'blue' | 'yellow', tokenId: number) => {
-    if (!currentUser || !roomId) return;
-    playSfx('move');
-
-    const updatedTokens = JSON.parse(JSON.stringify(gameState.tokens));
-    const tokenList = updatedTokens[playerColor];
-    const token = tokenList.find((t: any) => t.id === tokenId);
-
-    if (!token) return;
-
-    if (token.position === -1) {
-      if (gameState.diceValue === 6) {
-        token.position = 0;
-      }
-    } else {
-      token.position += gameState.diceValue;
-      if (token.position > 51) token.position = 51;
-    }
-
-    const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
-    try {
-      await updateDoc(gameDocRef, { tokens: updatedTokens });
-    } catch (e) {
-      console.log("Token update error:", e);
-    }
   };
 
   const renderDiceDots = (value: number) => {
@@ -393,7 +311,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
 
       <div className="mb-3 text-center flex flex-col items-center relative z-20">
         <span className="text-[10px] text-white/90 mb-2 uppercase tracking-wider font-bold">
-          {gameState.lastRolledBy ? `ROLLED BY: @${gameState.lastRolledBy}` : 'READY TO ROLL'}
+          {lastRolledBy ? `ROLLED BY: @${lastRolledBy}` : 'READY TO ROLL'}
         </span>
         
         <div className={`w-16 h-16 ${activeTheme.diceBg} rounded-xl flex items-center justify-center mb-3 border-2 relative overflow-hidden transition-all duration-500 ${isRolling ? 'animate-spin scale-110' : ''}`}>
@@ -410,7 +328,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
       </div>
 
       <div className="w-full flex justify-center mt-1 pb-1 relative z-20">
-        <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenClick} />
+        <LudoBoardVisual theme={activeTheme} />
       </div>
 
     </div>
