@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - CINEMATIC MULTIVERSE LUDO ENGINE (DICE 1 & 6 OUT RULE)
+ * NOISE / THE DIGITALIGHT - CINEMATIC MULTIVERSE LUDO ENGINE (COMPLETE RULES & CAPTURE LOGIC)
  * ====================================================================================
  */
 
@@ -45,6 +45,7 @@ const initialTokensState: PlayerTokens = {
   yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
 };
 
+// Safe zones / Star tile indices where tokens are safe from being captured
 const SAFE_POSITIONS = [0, 8, 13, 21, 26, 34, 39, 47];
 
 const CINEMATIC_THEMES = [
@@ -420,7 +421,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     if (!token) return;
 
     if (token.position === -1) {
-      // Allow token to come out if dice value is 1 or 6
       if (gameState.diceValue === 1 || gameState.diceValue === 6) {
         token.position = 0;
         token.isHome = false;
