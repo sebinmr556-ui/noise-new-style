@@ -434,7 +434,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         token.position = 99; // Finished Goal
         playSfx('win');
       } else {
-        // Capturing logic (Vetta logic)
         const newPos = token.position;
         if (!SAFE_POSITIONS.includes(newPos)) {
           const colors: PlayerColor[] = ['red', 'green', 'blue', 'yellow'];
@@ -490,4 +489,72 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     
     const activeDots = getDots(value);
     
-    ::contentReference[oaicite:0]{index:0}
+    return (
+      <div className={`grid grid-cols-3 grid-rows-3 gap-1 w-full h-full p-2 relative z-10 transition-all duration-200 ${isRolling ? 'opacity-0 scale-50 blur-xl' : 'opacity-100 scale-100 blur-0'}`}>
+        {[0,1,2,3,4,5,6,7,8].map(i => (
+          <div key={i} className="flex items-center justify-center">
+            {activeDots.includes(i) && (
+              <div className="w-3 h-3 bg-white rounded-full shadow-md"></div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  return (
+    <div className={`flex flex-col items-center justify-center p-3 bg-gradient-to-br ${activeTheme.bgWrap} rounded-2xl w-full border border-white/20 relative overflow-hidden transition-colors duration-700`}>
+      
+      <div className="w-full flex items-center justify-between pb-2 px-1 mb-1 border-b border-white/10">
+        <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+          {gameState.winner ? `🏆 WINNER: ${gameState.winner}` : `TURN: ${gameState.turn.toUpperCase()}`}
+        </span>
+        <button
+          onClick={() => setIsSoundOn(!isSoundOn)}
+          className={`px-3 py-1 rounded text-[10px] font-bold transition-all border ${
+            isSoundOn ? 'bg-emerald-700 text-white border-emerald-400' : 'bg-rose-950 text-rose-300 border-rose-600'
+          }`}
+        >
+          {isSoundOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}
+        </button>
+      </div>
+
+      <div className="w-full flex overflow-x-auto gap-2 pb-2 mb-2 scrollbar-hide snap-x">
+        {CINEMATIC_THEMES.map(theme => (
+          <button 
+            key={theme.id}
+            onClick={() => setActiveThemeId(theme.id)}
+            className={`snap-center shrink-0 px-3 py-1.5 rounded text-[10px] font-bold transition-all ${activeThemeId === theme.id ? 'bg-white text-black shadow-md scale-105' : 'bg-black/80 text-white/70 border border-white/20'}`}
+          >
+            {theme.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-3 text-center flex flex-col items-center relative z-20">
+        <span className="text-[10px] text-white/90 mb-2 uppercase tracking-wider font-bold">
+          {gameState.lastRolledBy ? `ROLLED BY: @${gameState.lastRolledBy}` : 'READY TO ROLL'}
+        </span>
+        
+        <div className={`w-16 h-16 ${activeTheme.diceBg} rounded-xl flex items-center justify-center mb-3 border-2 relative overflow-hidden transition-all duration-500 ${isRolling ? 'animate-spin scale-110' : ''}`}>
+          {renderDiceDots(displayFace)}
+        </div>
+        
+        <button 
+          onClick={rollDice}
+          disabled={isRolling || !!gameState.winner}
+          className="px-6 py-2.5 bg-black border border-white/40 text-white text-xs font-bold rounded hover:bg-zinc-900 active:scale-95 transition-all disabled:opacity-50 uppercase shadow-lg"
+        >
+          {isRolling ? 'ROLLING...' : 'ROLL DICE 🎲'}
+        </button>
+      </div>
+
+      <div className="w-full flex justify-center mt-1 pb-1 relative z-20">
+        <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenClick} />
+      </div>
+
+    </div>
+  );
+};
+
+export default LudoGame;
