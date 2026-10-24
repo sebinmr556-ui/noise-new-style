@@ -16,12 +16,15 @@ export function useAgoraAudio(
     let isMounted = true;
 
     const initAgora = async () => {
-      // ശ്രദ്ധിക്കുക: ഇവിടെ നിങ്ങളുടെ യഥാർത്ഥ Agora App ID കൊടുക്കണം
+      // നിങ്ങളുടെ യഥാർത്ഥ Agora App ID
       const appId = "e21e0ed62adc4f7786c81754997bf42d"; 
       
+      // ശ്രദ്ധിക്കുക: താഴെ നിങ്ങൾ ഇപ്പോൾ കോപ്പി ചെയ്ത നീളമുള്ള ടോക്കൺ കൊടുക്കുക
+      const token = "നിങ്ങൾ_കോപ്പി_ചെയ്ത_നീളമുള്ള_ടോക്കൺ_ഇവിടെ_പേസ്റ്റ്_ചെയ്യുക";
+      
       try {
-        // റൂമിലേക്ക് കണക്ട് ചെയ്യുന്നു
-        await client.join(appId, roomId, null, uid);
+        // റൂമിലേക്ക് കണക്ട് ചെയ്യുന്നു (ടെസ്റ്റ് ചെയ്യാൻ വേണ്ടി testroom, 1001 എന്നിവ കൊടുത്തു)
+        await client.join(appId, "testroom", token, 1001);
 
         // മറ്റാരെങ്കിലും സംസാരിക്കുമ്പോൾ ആ ഓഡിയോ പ്ലേ ചെയ്യുന്നു
         client.on("user-published", async (user, mediaType) => {
