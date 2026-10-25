@@ -68,7 +68,7 @@ import { YouTubeWatchTogether } from './YouTubeWatchTogether';
 import LudoGame from './games/LudoGame';
 
 // LiveKit Components & Styles import
-import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import { LiveKitRoom, RoomAudioRenderer, useLocalParticipant } from '@livekit/components-react';
 import '@livekit/components-styles';
 
 interface VoiceRoomModalProps {
@@ -130,6 +130,22 @@ const LUXURY_THEMES = [
     cost: 15000
   }
 ];
+
+// LiveKit-ൽ മൈക്ക് കൺട്രോൾ ചെയ്യാനുള്ള കോമ്പോണന്റ്
+const LiveKitMicController = ({ isSpeaker, isMuted }: { isSpeaker: boolean, isMuted: boolean }) => {
+  const { localParticipant } = useLocalParticipant();
+
+  useEffect(() => {
+    if (localParticipant) {
+      // സീറ്റിൽ ഉണ്ടെങ്കിൽ (isSpeaker) ഒപ്പം മ്യൂട്ട് അല്ലെങ്കിലും മാത്രം മൈക്ക് ഓൺ ആക്കുക
+      localParticipant.setMicrophoneEnabled(isSpeaker && !isMuted).catch((err) => {
+        console.log('LiveKit Mic Error:', err);
+      });
+    }
+  }, [localParticipant, isSpeaker, isMuted]);
+
+  return null;
+};
 
 export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   room: initialRoom,
@@ -596,18 +612,19 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black select-none">
       
       {/* ------------------------------------------------------------- */}
-      {/* LIVEKIT AUDIO RENDERER (എല്ലാ യൂസർമാർക്കും ഓഡിയോ കേൾക്കാൻ ഇത് സഹായിക്കും) */}
+      {/* LIVEKIT AUDIO RENDERER & CONTROLLER */}
       {/* ------------------------------------------------------------- */}
       {liveKitToken && liveKitUrl && (
         <LiveKitRoom
           video={false}
-          audio={isSpeaker} // സ്പീക്കർമാർക്ക് മാത്രം മൈക്ക് പബ്ലിഷ് ചെയ്യാം, മറ്റുള്ളവർക്ക് ഓഡിയോ കേൾക്കാം
+          audio={false} // Controller വഴിയാണ് ഇനി മൈക്ക് കൺട്രോൾ ചെയ്യുന്നത് 
           token={liveKitToken}
           serverUrl={liveKitUrl}
           connect={true}
           style={{ display: 'none' }}
         >
           <RoomAudioRenderer />
+          <LiveKitMicController isSpeaker={isSpeaker} isMuted={isMuted} />
         </LiveKitRoom>
       )}
 
