@@ -41,20 +41,12 @@ import {
 } from '../types';
 import { isGlobalAdmin, isVerifiedUser } from '../utils/admin';
 import { 
-  createMicAnalyser, 
-  MicAnalyserHandle, 
   playChimeSound, 
   playPopSound, 
   playClapSound, 
   playMicToggleSound, 
   playVictorySound
 } from '../utils/audioVibeEngine';
-import {
-  setActiveVoiceRoomStream,
-  setLocalMediaTrackMuted,
-  stopActiveVoiceRoomStream,
-  subscribeToMediaTrackChanges,
-} from '../utils/voiceRoomMedia';
 import { db, isFirebaseConfigured } from '../firebase';
 import { 
   collection, 
@@ -137,7 +129,6 @@ const LiveKitMicController = ({ isSpeaker, isMuted }: { isSpeaker: boolean, isMu
 
   useEffect(() => {
     if (localParticipant) {
-      // സീറ്റിൽ ഉണ്ടെങ്കിൽ (isSpeaker) ഒപ്പം മ്യൂട്ട് അല്ലെങ്കിലും മാത്രം മൈക്ക് ഓൺ ആക്കുക
       localParticipant.setMicrophoneEnabled(isSpeaker && !isMuted).catch((err) => {
         console.log('LiveKit Mic Error:', err);
       });
@@ -229,8 +220,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [userCoins, setUserCoins] = useState(2500);
   const [flyingGift, setFlyingGift] = useState<string | null>(null);
 
-  const localStreamRef = useRef<MediaStream | null>(null);
-  const micHandleRef = useRef<MicAnalyserHandle | null>(null);
   const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Sync Live Voice Room Document from Firestore
@@ -286,72 +275,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     return () => unsubscribe();
   }, [roomId]);
 
-  // 3. Microphone Hardware Stream Capture for Speakers
-  useEffect(() => {
-    if (isSpeaker && !localStreamRef.current) {
-      navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        }, 
-        video: false 
-      })
-        .then((stream) => {
-          localStreamRef.current = stream;
-          setActiveVoiceRoomStream(stream, isMuted);
-          createMicAnalyser().then((handle) => {
-            if (handle) {
-              micHandleRef.current = handle;
-              handle.setMuted(isMuted);
-              const checkVolume = () => {
-                const vol = handle.getVolumeLevel();
-                setIsSpeakingLocally(!isMuted && vol > 12);
-                requestAnimationFrame(checkVolume);
-              };
-              requestAnimationFrame(checkVolume);
-            }
-          });
-        })
-        .catch((e) => console.log('Mic access notice in room:', e));
-    }
-
-    if (!isSpeaker && localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-      if (micHandleRef.current) {
-        micHandleRef.current.cleanup();
-        micHandleRef.current = null;
-      }
-      stopActiveVoiceRoomStream();
-      setIsSpeakingLocally(false);
-    }
-
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-        localStreamRef.current = null;
-      }
-      if (micHandleRef.current) {
-        micHandleRef.current.cleanup();
-        micHandleRef.current = null;
-      }
-      stopActiveVoiceRoomStream();
-    };
-  }, [isSpeaker]);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToMediaTrackChanges((muted) => setIsMuted(muted));
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((t) => { t.enabled = !isMuted; });
-    }
-    if (micHandleRef.current) micHandleRef.current.setMuted(isMuted);
-  }, [isMuted]);
-
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -382,7 +305,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
     playMicToggleSound(!nextMuted);
-    setLocalMediaTrackMuted(nextMuted);
 
     if (currentUser) {
       const updatedSpeakers = currentRoom.speakers.map((s) => 
