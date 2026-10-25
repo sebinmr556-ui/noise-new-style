@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
+import { AccessToken } from 'livekit-server-sdk';
 import { 
   startChatRoomCleanupJob, 
   purgeAllExistingChatRooms, 
@@ -87,6 +88,43 @@ app.post('/api/upload', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[Upload API] Error saving file:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API: LiveKit Token Generation for Voice Rooms
+app.post('/api/get-token', async (req: Request, res: Response) => {
+  try {
+    const { roomName, username } = req.body;
+
+    if (!roomName || !username) {
+      return res.status(400).json({ success: false, error: 'Missing roomName or username' });
+    }
+
+    const apiKey = process.env.LIVEKIT_API_KEY;
+    const apiSecret = process.env.LIVEKIT_API_SECRET;
+
+    if (!apiKey || !apiSecret) {
+      console.error('[LiveKit] API keys are missing in environment variables');
+      return res.status(500).json({ success: false, error: 'LiveKit API keys not configured on server' });
+    }
+
+    const at = new AccessToken(apiKey, apiSecret, {
+      identity: username,
+      ttl: '2h',
+    });
+
+    at.addGrant({
+      roomJoin: true,
+      room: roomName,
+      canPublish: true,
+      canSubscribe: true,
+    });
+
+    const token = await at.toJwt();
+    res.json({ success: true, token });
+  } catch (error: any) {
+    console.error('[LiveKit] Token generation error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
