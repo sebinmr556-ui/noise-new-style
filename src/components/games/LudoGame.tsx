@@ -1,6 +1,6 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - ULTIMATE LUDO ENGINE (WITH DISPLAY TIMER & TURN STARTED AT)
+ * NOISE / THE DIGITALIGHT - ULTIMATE LUDO ENGINE (SLOT AVATARS & PROFILES INTEGRATED)
  * ====================================================================================
  */
 
@@ -34,11 +34,16 @@ export interface PlayerTokens {
   yellow: TokenState[];
 }
 
+export interface PlayerSlot {
+  username: string;
+  avatar?: string;
+}
+
 export interface PlayersMap {
-  red: string | null;
-  green: string | null;
-  blue: string | null;
-  yellow: string | null;
+  red: PlayerSlot | null;
+  green: PlayerSlot | null;
+  blue: PlayerSlot | null;
+  yellow: PlayerSlot | null;
 }
 
 interface GameState {
@@ -88,7 +93,6 @@ const getGlobalPosition = (
   position: number,
 ): number => {
   if (position < 0 || position > 51) return -1;
-
   return (START_OFFSETS[color] + position) % 52;
 };
 
@@ -106,7 +110,6 @@ const canMoveToken = (
 ): boolean => {
   if (token.position === -1) return dice === 6;
   if (token.position === 57) return false;
-
   return token.position + dice <= 57;
 };
 
@@ -251,6 +254,7 @@ const Tile = ({ colorClass, hasStar, tokensOnTile, onTokenClick }: { colorClass:
 
 const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameState: GameState, onTokenClick: (p: PlayerColor, id: number) => void }) => {
   const tokens = gameState?.tokens || createInitialTokens();
+  const players = gameState?.players || initialPlayersState;
 
   const getTokensOnTrackIndex = (tileIndex: number) => {
     const result: {player: PlayerColor, id: number}[] = [];
@@ -267,97 +271,137 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
     return result;
   };
 
+  const renderPlayerCard = (color: PlayerColor) => {
+    const player = players[color];
+    const isCurrentTurn = gameState.turn === color && !gameState.winner;
+
+    const borderColorMap: Record<PlayerColor, string> = {
+      red: 'border-red-500',
+      green: 'border-emerald-500',
+      blue: 'border-blue-500',
+      yellow: 'border-amber-400'
+    };
+
+    return (
+      <div className={`flex items-center gap-1.5 p-1.5 rounded-xl bg-black/80 border-2 ${isCurrentTurn ? 'border-yellow-400 shadow-[0_0_12px_rgba(250,204,21,0.8)] animate-pulse' : borderColorMap[color]} backdrop-blur-sm max-w-[130px]`}>
+        <div className="w-8 h-8 rounded-full overflow-hidden border border-white/40 shrink-0 bg-zinc-800 flex items-center justify-center">
+          {player?.avatar ? (
+            <img src={player.avatar} alt={player.username} className="w-full h-full object-cover" />
+          ) : (
+            <span className="text-[10px] font-black text-white">{player ? player.username.charAt(0).toUpperCase() : color.charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="flex flex-col overflow-hidden">
+          <span className="text-[9px] font-black text-white truncate">{player ? player.username : `${color} (Empty)`}</span>
+          <span className="text-[7px] text-amber-300 font-bold uppercase">{isCurrentTurn ? 'Playing...' : player ? 'Joined' : 'Open Slot'}</span>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className={`w-full max-w-[350px] aspect-square p-3.5 rounded-2xl border-[6px] ${theme.boardStyle} relative select-none overflow-hidden backdrop-blur-md`}>
-      <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-transparent to-white/10 pointer-events-none z-30"></div>
+    <div className="flex flex-col items-center gap-2 w-full">
+      <div className="w-full flex justify-between px-2">
+        {renderPlayerCard('red')}
+        {renderPlayerCard('green')}
+      </div>
 
-      <div className="w-full h-full border-[3px] border-black grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] overflow-hidden bg-stone-950 relative z-10 shadow-[0_25px_50px_rgba(0,0,0,1)]">
-        
-        {/* Red Base */}
-        <Base outerClass="bg-red-950" tokenColor="text-red-500 fill-red-600" tokens={tokens.red} playerColor="red" onTokenClick={onTokenClick} />
-        
-        {/* Top Track (Green section) */}
-        <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
-          {renderCells(18, (i) => {
-            const isHomeStretch = [4,7,10,13,16].includes(i);
-            const isStart = i === 5;
-            let colorClass = "bg-stone-900/90"; 
-            if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-emerald-600 to-emerald-800"; 
-            
-            const trackIdx = i < 6 ? i + 12 : i; 
-            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
-            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
+      <div className={`w-full max-w-[340px] aspect-square p-3 rounded-2xl border-[5px] ${theme.boardStyle} relative select-none overflow-hidden backdrop-blur-md`}>
+        <div className="absolute inset-0 bg-gradient-to-tr from-black/80 via-transparent to-white/10 pointer-events-none z-30"></div>
 
-            return <Tile key={`t-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
-          })}
+        <div className="w-full h-full border-[3px] border-black grid grid-cols-[6fr_3fr_6fr] grid-rows-[6fr_3fr_6fr] overflow-hidden bg-stone-950 relative z-10 shadow-[0_25px_50px_rgba(0,0,0,1)]">
+          
+          {/* Red Base */}
+          <Base outerClass="bg-red-950" tokenColor="text-red-500 fill-red-600" tokens={tokens.red} playerColor="red" onTokenClick={onTokenClick} />
+          
+          {/* Top Track (Green section) */}
+          <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
+            {renderCells(18, (i) => {
+              const isHomeStretch = [4,7,10,13,16].includes(i);
+              const isStart = i === 5;
+              let colorClass = "bg-stone-900/90"; 
+              if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-emerald-600 to-emerald-800"; 
+              
+              const trackIdx = i < 6 ? i + 12 : i; 
+              const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+              const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
+
+              return <Tile key={`t-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
+            })}
+          </div>
+
+          {/* Green Base */}
+          <Base outerClass="bg-emerald-950" tokenColor="text-emerald-400 fill-emerald-500" tokens={tokens.green} playerColor="green" onTokenClick={onTokenClick} />
+
+          {/* Left Track (Red section) */}
+          <div className="grid grid-cols-6 grid-rows-3 bg-stone-900">
+            {renderCells(18, (i) => {
+              const isHomeStretch = [7,8,9,10,11].includes(i);
+              const isStart = i === 1;
+              let colorClass = "bg-stone-900/90";
+              if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-red-600 to-red-800";
+              
+              const trackIdx = i + 18;
+              const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+              const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
+
+              return <Tile key={`l-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
+            })}
+          </div>
+          
+          {/* Center Home */}
+          <div className="relative border-[2.5px] border-black bg-black flex items-center justify-center shadow-[inset_0_0_25px_rgba(0,0,0,1)]">
+            <svg viewBox="0 0 100 100" className="w-full h-full opacity-95 drop-shadow-[0_8px_16px_rgba(0,0,0,1)]">
+              <polygon points="0,0 100,0 50,50" fill="#059669" stroke="#000" strokeWidth="2.5"/>
+              <polygon points="100,0 100,100 50,50" fill="#d97706" stroke="#000" strokeWidth="2.5"/>
+              <polygon points="0,100 100,100 50,50" fill="#2563eb" stroke="#000" strokeWidth="2.5"/>
+              <polygon points="0,0 0,100 50,50" fill="#dc2626" stroke="#000" strokeWidth="2.5"/>
+            </svg>
+          </div>
+
+          {/* Right Track (Yellow section) */}
+          <div className="grid grid-cols-6 grid-rows-3 bg-stone-900">
+            {renderCells(18, (i) => {
+              const isHomeStretch = [6,7,8,9,10].includes(i);
+              const isStart = i === 16;
+              let colorClass = "bg-stone-900/90";
+              if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-amber-500 to-amber-700";
+              
+              const trackIdx = i + 36;
+              const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+              const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
+
+              return <Tile key={`r-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
+            })}
+          </div>
+
+          {/* Blue Base */}
+          <Base outerClass="bg-blue-950" tokenColor="text-blue-500 fill-blue-600" tokens={tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
+
+          {/* Bottom Track (Blue section) */}
+          <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
+            {renderCells(18, (i) => {
+              const isHomeStretch = [1,4,7,10,13].includes(i);
+              const isStart = i === 12;
+              let colorClass = "bg-stone-900/90";
+              if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-blue-600 to-blue-800";
+              
+              const trackIdx = i + 54;
+              const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+              const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
+
+              return <Tile key={`b-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
+            })}
+          </div>
+
+          {/* Yellow Base */}
+          <Base outerClass="bg-amber-950" tokenColor="text-amber-400 fill-amber-500" tokens={tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
         </div>
+      </div>
 
-        {/* Green Base */}
-        <Base outerClass="bg-emerald-950" tokenColor="text-emerald-400 fill-emerald-500" tokens={tokens.green} playerColor="green" onTokenClick={onTokenClick} />
-
-        {/* Left Track (Red section) */}
-        <div className="grid grid-cols-6 grid-rows-3 bg-stone-900">
-          {renderCells(18, (i) => {
-            const isHomeStretch = [7,8,9,10,11].includes(i);
-            const isStart = i === 1;
-            let colorClass = "bg-stone-900/90";
-            if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-red-600 to-red-800";
-            
-            const trackIdx = i + 18;
-            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
-            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
-
-            return <Tile key={`l-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
-          })}
-        </div>
-        
-        {/* Center Home */}
-        <div className="relative border-[2.5px] border-black bg-black flex items-center justify-center shadow-[inset_0_0_25px_rgba(0,0,0,1)]">
-          <svg viewBox="0 0 100 100" className="w-full h-full opacity-95 drop-shadow-[0_8px_16px_rgba(0,0,0,1)]">
-            <polygon points="0,0 100,0 50,50" fill="#059669" stroke="#000" strokeWidth="2.5"/>
-            <polygon points="100,0 100,100 50,50" fill="#d97706" stroke="#000" strokeWidth="2.5"/>
-            <polygon points="0,100 100,100 50,50" fill="#2563eb" stroke="#000" strokeWidth="2.5"/>
-            <polygon points="0,0 0,100 50,50" fill="#dc2626" stroke="#000" strokeWidth="2.5"/>
-          </svg>
-        </div>
-
-        {/* Right Track (Yellow section) */}
-        <div className="grid grid-cols-6 grid-rows-3 bg-stone-900">
-          {renderCells(18, (i) => {
-            const isHomeStretch = [6,7,8,9,10].includes(i);
-            const isStart = i === 16;
-            let colorClass = "bg-stone-900/90";
-            if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-amber-500 to-amber-700";
-            
-            const trackIdx = i + 36;
-            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
-            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
-
-            return <Tile key={`r-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
-          })}
-        </div>
-
-        {/* Blue Base */}
-        <Base outerClass="bg-blue-950" tokenColor="text-blue-500 fill-blue-600" tokens={tokens.blue} playerColor="blue" onTokenClick={onTokenClick} />
-
-        {/* Bottom Track (Blue section) */}
-        <div className="grid grid-cols-3 grid-rows-6 bg-stone-900">
-          {renderCells(18, (i) => {
-            const isHomeStretch = [1,4,7,10,13].includes(i);
-            const isStart = i === 12;
-            let colorClass = "bg-stone-900/90";
-            if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-blue-600 to-blue-800";
-            
-            const trackIdx = i + 54;
-            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
-            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
-
-            return <Tile key={`b-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
-          })}
-        </div>
-
-        {/* Yellow Base */}
-        <Base outerClass="bg-amber-950" tokenColor="text-amber-400 fill-amber-500" tokens={tokens.yellow} playerColor="yellow" onTokenClick={onTokenClick} />
+      <div className="w-full flex justify-between px-2">
+        {renderPlayerCard('blue')}
+        {renderPlayerCard('yellow')}
       </div>
     </div>
   );
@@ -424,7 +468,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     return () => unsubscribe();
   }, [roomId]);
 
-  // Smooth local countdown timer based on turnStartedAt
   useEffect(() => {
     const timer = setInterval(() => {
       const diff = Math.max(0, 15 - Math.floor((Date.now() - gameState.turnStartedAt) / 1000));
@@ -433,7 +476,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     return () => clearInterval(timer);
   }, [gameState.turnStartedAt]);
 
-  // 15-second Turn Timer Logic using runTransaction
   useEffect(() => {
     if (!roomId || !db || gameState.winner) return;
     const timerInterval = setInterval(async () => {
@@ -458,9 +500,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
             }, { merge: true });
           }
         });
-      } catch (e) {
-        // Handle race conditions quietly
-      }
+      } catch (e) {}
     }, 1000);
 
     return () => clearInterval(timerInterval);
@@ -512,11 +552,11 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     return () => clearInterval(interval);
   }, [isRolling, gameState.diceValue]);
 
-  // Join slot function using runTransaction
   const handleJoinSlot = async (color: PlayerColor) => {
     if (!currentUser || !roomId || !db) return;
 
     const username = currentUser.username;
+    const avatar = currentUser.avatar || currentUser.photoURL || '';
     const gameDocRef = doc(
       db, 'voice_rooms', roomId, 'games', 'ludo'
     );
@@ -536,18 +576,18 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         };
 
         const existingColor = COLORS.find(
-          c => players[c] === username
+          c => players[c]?.username === username
         );
 
         if (existingColor && existingColor !== color) {
           throw new Error('You already own another color.');
         }
 
-        if (players[color] && players[color] !== username) {
+        if (players[color] && players[color]?.username !== username) {
           throw new Error('This color is already taken.');
         }
 
-        players[color] = username;
+        players[color] = { username, avatar };
 
         transaction.update(gameDocRef, { players });
       });
@@ -580,7 +620,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
           throw new Error('Cannot roll now.');
         }
 
-        if (state.players?.[state.turn] !== currentUser.username) {
+        if (state.players?.[state.turn]?.username !== currentUser.username) {
           throw new Error('It is not your turn.');
         }
 
@@ -660,7 +700,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
           throw new Error('Wrong player turn.');
         }
 
-        if (state.players?.[playerColor] !== currentUser.username) {
+        if (state.players?.[playerColor]?.username !== currentUser.username) {
           throw new Error('You do not own this color.');
         }
 
@@ -687,7 +727,6 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
 
         let captured = false;
 
-        // Main Track-ൽ മാത്രം capture ചെയ്യാം.
         if (
           oldPosition >= 0 &&
           oldPosition <= 51 &&
@@ -804,23 +843,32 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
-      {/* Slot Joining Bar */}
+      {/* Slot Joining Bar with Avatars */}
       <div className="w-full grid grid-cols-4 gap-1.5 mb-2 px-1">
         {COLORS.map(col => {
-          const joinedUser = gameState.players[col];
+          const player = gameState.players[col];
+          const isMySlot = player?.username === currentUser?.username;
+
           return (
             <button
               key={col}
               onClick={() => handleJoinSlot(col)}
-              className={`py-1.5 px-1 rounded text-[9px] font-black uppercase tracking-wider border transition-all truncate ${
-                joinedUser === currentUser?.username 
+              className={`py-1.5 px-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all flex items-center gap-1.5 truncate ${
+                isMySlot 
                   ? 'bg-emerald-600 text-white border-emerald-300 shadow-[0_0_10px_#10b981]' 
-                  : joinedUser 
-                  ? 'bg-zinc-800 text-zinc-400 border-zinc-700' 
+                  : player 
+                  ? 'bg-zinc-900 text-zinc-300 border-zinc-700' 
                   : 'bg-black/60 text-white/80 border-white/30 hover:bg-black'
               }`}
             >
-              {joinedUser ? `👤 ${joinedUser}` : `+ Join ${col}`}
+              <div className="w-5 h-5 rounded-full overflow-hidden bg-zinc-800 shrink-0 flex items-center justify-center border border-white/40">
+                {player?.avatar ? (
+                  <img src={player.avatar} alt={player.username} className="w-full h-full object-cover" />
+                ) : (
+                  <span>{player ? player.username.charAt(0).toUpperCase() : '+'}</span>
+                )}
+              </div>
+              <span className="truncate">{player ? player.username : `Join ${col}`}</span>
             </button>
           );
         })}
@@ -858,7 +906,7 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         </button>
       </div>
 
-      {/* Luxury Board Visual */}
+      {/* Luxury Board Visual with Surrounding Player Avatars */}
       <div className="w-full flex justify-center mt-1 pb-1 relative z-20 drop-shadow-[0_25px_40px_rgba(0,0,0,1)]">
         <LudoBoardVisual theme={activeTheme} gameState={gameState} onTokenClick={handleTokenClick} />
       </div>
