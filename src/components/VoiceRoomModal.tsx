@@ -163,14 +163,13 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
 
   // -------------------------------------------------------------
-  // LIVEKIT TOKEN & CONNECTION STATES
+  // LIVEKIT TOKEN & CONNECTION STATES (എല്ലാ യൂസർമാർക്കും ടോക്കൺ എടുക്കും)
   // -------------------------------------------------------------
   const [liveKitToken, setLiveKitToken] = useState<string | null>(null);
   const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL;
 
-  // യൂസർ സ്പീക്കർ ആകുമ്പോൾമാത്രം ബാക്ക്എൻഡിൽ നിന്ന് LiveKit ടോക്കൺ ഫെച്ച് ചെയ്യുക
   useEffect(() => {
-    if (isSpeaker && currentUser) {
+    if (isOpen && currentUser && roomId) {
       fetch('/api/get-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,10 +187,8 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           }
         })
         .catch((err) => console.error('Error fetching LiveKit token:', err));
-    } else {
-      setLiveKitToken(null);
     }
-  }, [isSpeaker, currentUser, roomId]);
+  }, [isOpen, currentUser, roomId]);
 
   // UI sheets and modals
   const [showAudienceSheet, setShowAudienceSheet] = useState(false);
@@ -599,12 +596,12 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black select-none">
       
       {/* ------------------------------------------------------------- */}
-      {/* LIVEKIT AUDIO RENDERER WRAPPER (യുസർ സ്പീക്കർ ആകുമ്പോൾമാത്രം ആക്ടീവ് ആകും) */}
+      {/* LIVEKIT AUDIO RENDERER (എല്ലാ യൂസർമാർക്കും ഓഡിയോ കേൾക്കാൻ ഇത് സഹായിക്കും) */}
       {/* ------------------------------------------------------------- */}
-      {isSpeaker && liveKitToken && liveKitUrl && (
+      {liveKitToken && liveKitUrl && (
         <LiveKitRoom
           video={false}
-          audio={true}
+          audio={isSpeaker} // സ്പീക്കർമാർക്ക് മാത്രം മൈക്ക് പബ്ലിഷ് ചെയ്യാം, മറ്റുള്ളവർക്ക് ഓഡിയോ കേൾക്കാം
           token={liveKitToken}
           serverUrl={liveKitUrl}
           connect={true}
