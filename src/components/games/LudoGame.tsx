@@ -1,12 +1,17 @@
 /**
  * ====================================================================================
- * NOISE / THE DIGITALIGHT - ULTIMATE LUXURY CINEMATIC LUDO ENGINE (CLASSIC PAWN TOKENS)
+ * NOISE / THE DIGITALIGHT - ULTIMATE LUDO ENGINE (WITH DISPLAY TIMER & TURN STARTED AT)
  * ====================================================================================
  */
 
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../firebase';
-import { doc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  doc,
+  onSnapshot,
+  setDoc,
+  runTransaction,
+} from 'firebase/firestore';
 import { AppUser } from '../../types';
 
 interface LudoGameProps {
@@ -18,7 +23,7 @@ export type PlayerColor = 'red' | 'green' | 'blue' | 'yellow';
 
 export interface TokenState {
   id: number;
-  position: number; // -1: Base, 0-51: Main Track, 52-57: Home Stretch, 99: Finished Goal
+  position: number; // -1: Base, 0-51: Main Track, 52-56: Home Stretch, 57: Finished Goal
   isHome: boolean;
 }
 
@@ -29,13 +34,25 @@ export interface PlayerTokens {
   yellow: TokenState[];
 }
 
+export interface PlayersMap {
+  red: string | null;
+  green: string | null;
+  blue: string | null;
+  yellow: string | null;
+}
+
 interface GameState {
   diceValue: number;
   lastRolledBy: string;
   turn: PlayerColor;
   tokens: PlayerTokens;
+  players: PlayersMap;
   consecutiveSixes: number;
   winner: string | null;
+  turnTimer: number;
+  hasRolled: boolean;
+  turnStartedAt: number;
+  revision: number;
 }
 
 const initialTokensState: PlayerTokens = {
@@ -45,7 +62,68 @@ const initialTokensState: PlayerTokens = {
   yellow: [{id: 1, position: -1, isHome: true}, {id: 2, position: -1, isHome: true}, {id: 3, position: -1, isHome: true}, {id: 4, position: -1, isHome: true}]
 };
 
-const STAR_TRACK_INDICES = [0, 8, 13, 21, 26, 34, 39, 47];
+const initialPlayersState: PlayersMap = {
+  red: null,
+  green: null,
+  blue: null,
+  yellow: null
+};
+
+const COLORS: PlayerColor[] = [
+  'red',
+  'green',
+  'blue',
+  'yellow',
+];
+
+const START_OFFSETS: Record<PlayerColor, number> = {
+  red: 0,
+  green: 13,
+  blue: 26,
+  yellow: 39,
+};
+
+const getGlobalPosition = (
+  color: PlayerColor,
+  position: number,
+): number => {
+  if (position < 0 || position > 51) return -1;
+
+  return (START_OFFSETS[color] + position) % 52;
+};
+
+const getNextTurn = (
+  color: PlayerColor,
+): PlayerColor => {
+  return COLORS[
+    (COLORS.indexOf(color) + 1) % COLORS.length
+  ];
+};
+
+const canMoveToken = (
+  token: TokenState,
+  dice: number,
+): boolean => {
+  if (token.position === -1) return dice === 6;
+  if (token.position === 57) return false;
+
+  return token.position + dice <= 57;
+};
+
+const hasValidMove = (
+  tokens: PlayerTokens,
+  color: PlayerColor,
+  dice: number,
+): boolean => {
+  return tokens[color].some(token =>
+    canMoveToken(token, dice)
+  );
+};
+
+const createInitialTokens = (): PlayerTokens =>
+  JSON.parse(JSON.stringify(initialTokensState));
+
+const SAFE_GLOBAL_POSITIONS = [0, 8, 13, 21, 26, 34, 39, 47];
 
 const CINEMATIC_THEMES = [
   { 
@@ -110,7 +188,6 @@ const renderCells = (count: number, renderFn: (index: number) => React.ReactNode
   return Array.from({ length: count }).map((_, i) => renderFn(i));
 };
 
-// Classic Luxury Ludo Pawn (Karukkal) Component using SVG
 const Token = ({ colorClass, tokenId, onClick }: { colorClass: string, tokenId: number, onClick?: () => void }) => (
   <div 
     onClick={onClick} 
@@ -130,7 +207,7 @@ const Token = ({ colorClass, tokenId, onClick }: { colorClass: string, tokenId: 
 );
 
 const Base = ({ outerClass, tokenColor, tokens, playerColor, onTokenClick }: { outerClass: string, tokenColor: string, tokens: TokenState[], playerColor: PlayerColor, onTokenClick: (p: PlayerColor, id: number) => void }) => {
-  const safeTokens = tokens || [{id:1, position:-1, isHome:true},{id:2, position:-1, isHome:true},{id:3, position:-1, isHome:true},{id:4, position:-1, isHome:true}];
+  const safeTokens = tokens || createInitialTokens()[playerColor];
   return (
     <div className={`p-3 flex items-center justify-center ${outerClass} relative border-[3px] border-black overflow-hidden shadow-inner`}>
       <div className="w-full h-full bg-black/90 rounded-md p-2.5 grid grid-cols-2 gap-2.5 border border-white/25 shadow-[inset_0_8px_16px_rgba(0,0,0,1)]">
@@ -173,16 +250,15 @@ const Tile = ({ colorClass, hasStar, tokensOnTile, onTokenClick }: { colorClass:
 };
 
 const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameState: GameState, onTokenClick: (p: PlayerColor, id: number) => void }) => {
-  const tokens = gameState?.tokens || initialTokensState;
+  const tokens = gameState?.tokens || createInitialTokens();
 
   const getTokensOnTrackIndex = (tileIndex: number) => {
     const result: {player: PlayerColor, id: number}[] = [];
-    const colors: PlayerColor[] = ['red', 'green', 'blue', 'yellow'];
-    
-    colors.forEach(color => {
+    COLORS.forEach(color => {
       if (tokens[color]) {
         tokens[color].forEach(token => {
-          if (token.position === tileIndex) {
+          const globalPos = getGlobalPosition(color, token.position);
+          if (globalPos === tileIndex) {
             result.push({ player: color, id: token.id });
           }
         });
@@ -207,9 +283,10 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             const isStart = i === 5;
             let colorClass = "bg-stone-900/90"; 
             if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-emerald-600 to-emerald-800"; 
-            const trackIdx = i; 
-            const tokensHere = getTokensOnTrackIndex(trackIdx);
-            const isStarTile = STAR_TRACK_INDICES.includes(trackIdx);
+            
+            const trackIdx = i < 6 ? i + 12 : i; 
+            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
 
             return <Tile key={`t-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
           })}
@@ -225,9 +302,10 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             const isStart = i === 1;
             let colorClass = "bg-stone-900/90";
             if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-red-600 to-red-800";
+            
             const trackIdx = i + 18;
-            const tokensHere = getTokensOnTrackIndex(trackIdx);
-            const isStarTile = STAR_TRACK_INDICES.includes(trackIdx);
+            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
 
             return <Tile key={`l-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
           })}
@@ -250,9 +328,10 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             const isStart = i === 16;
             let colorClass = "bg-stone-900/90";
             if (isHomeStretch || isStart) colorClass = "bg-gradient-to-r from-amber-500 to-amber-700";
+            
             const trackIdx = i + 36;
-            const tokensHere = getTokensOnTrackIndex(trackIdx);
-            const isStarTile = STAR_TRACK_INDICES.includes(trackIdx);
+            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
 
             return <Tile key={`r-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
           })}
@@ -268,9 +347,10 @@ const LudoBoardVisual = ({ theme, gameState, onTokenClick }: { theme: any, gameS
             const isStart = i === 12;
             let colorClass = "bg-stone-900/90";
             if (isHomeStretch || isStart) colorClass = "bg-gradient-to-b from-blue-600 to-blue-800";
+            
             const trackIdx = i + 54;
-            const tokensHere = getTokensOnTrackIndex(trackIdx);
-            const isStarTile = STAR_TRACK_INDICES.includes(trackIdx);
+            const tokensHere = getTokensOnTrackIndex(trackIdx >= 52 ? trackIdx % 52 : trackIdx);
+            const isStarTile = SAFE_GLOBAL_POSITIONS.includes(trackIdx);
 
             return <Tile key={`b-${i}`} colorClass={colorClass} hasStar={isStarTile} tokensOnTile={tokensHere} onTokenClick={onTokenClick} />
           })}
@@ -288,14 +368,20 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     diceValue: 1,
     lastRolledBy: '',
     turn: 'red',
-    tokens: initialTokensState,
+    tokens: createInitialTokens(),
+    players: initialPlayersState,
     consecutiveSixes: 0,
-    winner: null
+    winner: null,
+    turnTimer: 15,
+    hasRolled: false,
+    turnStartedAt: Date.now(),
+    revision: 0
   });
   const [isRolling, setIsRolling] = useState(false);
   const [activeThemeId, setActiveThemeId] = useState('egyptian');
   const [displayFace, setDisplayFace] = useState(1);
   const [isSoundOn, setIsSoundOn] = useState(true);
+  const [displayTimer, setDisplayTimer] = useState(15);
 
   const activeTheme = CINEMATIC_THEMES.find(t => t.id === activeThemeId) || CINEMATIC_THEMES[0];
   const ambientAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -310,23 +396,75 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
           diceValue: data.diceValue || 1,
           lastRolledBy: data.lastRolledBy || '',
           turn: data.turn || 'red',
-          tokens: data.tokens || initialTokensState,
+          tokens: data.tokens || createInitialTokens(),
+          players: data.players || initialPlayersState,
           consecutiveSixes: data.consecutiveSixes || 0,
-          winner: data.winner || null
+          winner: data.winner || null,
+          turnTimer: data.turnTimer !== undefined ? data.turnTimer : 15,
+          hasRolled: data.hasRolled || false,
+          turnStartedAt: data.turnStartedAt || Date.now(),
+          revision: data.revision !== undefined ? data.revision : 0
         });
       } else {
         setDoc(gameDocRef, { 
           diceValue: 1, 
           lastRolledBy: '', 
           turn: 'red', 
-          tokens: initialTokensState,
+          tokens: createInitialTokens(),
+          players: initialPlayersState,
           consecutiveSixes: 0,
-          winner: null
+          winner: null,
+          turnTimer: 15,
+          hasRolled: false,
+          turnStartedAt: Date.now(),
+          revision: 0
         }).catch(e => console.log(e));
       }
     });
     return () => unsubscribe();
   }, [roomId]);
+
+  // Smooth local countdown timer based on turnStartedAt
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = Math.max(0, 15 - Math.floor((Date.now() - gameState.turnStartedAt) / 1000));
+      setDisplayTimer(diff);
+    }, 200);
+    return () => clearInterval(timer);
+  }, [gameState.turnStartedAt]);
+
+  // 15-second Turn Timer Logic using runTransaction
+  useEffect(() => {
+    if (!roomId || !db || gameState.winner) return;
+    const timerInterval = setInterval(async () => {
+      const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
+      try {
+        await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(gameDocRef);
+          if (!docSnap.exists()) return;
+          const data = docSnap.data() as GameState;
+          
+          if (data.turnTimer > 0) {
+            transaction.set(gameDocRef, { turnTimer: data.turnTimer - 1 }, { merge: true });
+          } else {
+            const nextCol = getNextTurn(data.turn);
+            transaction.set(gameDocRef, { 
+              turn: nextCol, 
+              turnTimer: 15,
+              consecutiveSixes: 0,
+              hasRolled: false,
+              turnStartedAt: Date.now(),
+              revision: (data.revision || 0) + 1
+            }, { merge: true });
+          }
+        });
+      } catch (e) {
+        // Handle race conditions quietly
+      }
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, [gameState.turnTimer, gameState.turn, gameState.winner, roomId]);
 
   useEffect(() => {
     if (ambientAudioRef.current) {
@@ -374,126 +512,244 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
     return () => clearInterval(interval);
   }, [isRolling, gameState.diceValue]);
 
-  const getNextTurn = (currentTurn: PlayerColor): PlayerColor => {
-    if (currentTurn === 'red') return 'green';
-    if (currentTurn === 'green') return 'blue';
-    if (currentTurn === 'blue') return 'yellow';
-    return 'red';
+  // Join slot function using runTransaction
+  const handleJoinSlot = async (color: PlayerColor) => {
+    if (!currentUser || !roomId || !db) return;
+
+    const username = currentUser.username;
+    const gameDocRef = doc(
+      db, 'voice_rooms', roomId, 'games', 'ludo'
+    );
+
+    try {
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(gameDocRef);
+
+        if (!snapshot.exists()) {
+          throw new Error('Game has not been initialized.');
+        }
+
+        const state = snapshot.data() as GameState;
+        const players = {
+          ...initialPlayersState,
+          ...state.players,
+        };
+
+        const existingColor = COLORS.find(
+          c => players[c] === username
+        );
+
+        if (existingColor && existingColor !== color) {
+          throw new Error('You already own another color.');
+        }
+
+        if (players[color] && players[color] !== username) {
+          throw new Error('This color is already taken.');
+        }
+
+        players[color] = username;
+
+        transaction.update(gameDocRef, { players });
+      });
+    } catch (error) {
+      console.error('Join slot failed:', error);
+    }
   };
 
   const rollDice = async () => {
-    if (!currentUser || !roomId || isRolling || gameState.winner) return;
-    
-    playSfx('dice');
-    setIsRolling(true);
-    
-    const randomNum = Math.floor(Math.random() * 6) + 1;
-    const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
-    
-    let newSixesCount = gameState.consecutiveSixes;
-    let nextTurn = gameState.turn;
+    if (!currentUser || !roomId || !db || isRolling) return;
 
-    if (randomNum === 6) {
-      newSixesCount += 1;
-      if (newSixesCount === 3) {
-        newSixesCount = 0;
-        nextTurn = getNextTurn(gameState.turn);
-      }
-    } else {
-      newSixesCount = 0;
-      nextTurn = getNextTurn(gameState.turn);
-    }
+    setIsRolling(true);
+    playSfx('dice');
+
+    const gameDocRef = doc(
+      db, 'voice_rooms', roomId, 'games', 'ludo'
+    );
 
     try {
-      await updateDoc(gameDocRef, { 
-        diceValue: randomNum, 
-        lastRolledBy: currentUser.username,
-        consecutiveSixes: newSixesCount,
-        turn: randomNum === 6 ? gameState.turn : nextTurn
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(gameDocRef);
+
+        if (!snapshot.exists()) {
+          throw new Error('Game not initialized.');
+        }
+
+        const state = snapshot.data() as GameState;
+
+        if (state.winner || state.hasRolled) {
+          throw new Error('Cannot roll now.');
+        }
+
+        if (state.players?.[state.turn] !== currentUser.username) {
+          throw new Error('It is not your turn.');
+        }
+
+        const dice = Math.floor(Math.random() * 6) + 1;
+
+        const sixes =
+          dice === 6 ? state.consecutiveSixes + 1 : 0;
+
+        if (sixes >= 3) {
+          transaction.update(gameDocRef, {
+            diceValue: dice,
+            lastRolledBy: currentUser.username,
+            consecutiveSixes: 0,
+            turn: getNextTurn(state.turn),
+            hasRolled: false,
+            turnTimer: 15,
+            turnStartedAt: Date.now(),
+            revision: (state.revision ?? 0) + 1,
+          });
+          return;
+        }
+
+        const updatedTokens = state.tokens ?? createInitialTokens();
+
+        const canMove = hasValidMove(
+          updatedTokens, state.turn, dice
+        );
+
+        const nextTurn =
+          dice === 6 || canMove
+            ? state.turn
+            : getNextTurn(state.turn);
+
+        transaction.update(gameDocRef, {
+          diceValue: dice,
+          lastRolledBy: currentUser.username,
+          consecutiveSixes: sixes,
+          turn: nextTurn,
+          hasRolled: canMove,
+          turnTimer: 15,
+          turnStartedAt: Date.now(),
+          revision: (state.revision ?? 0) + 1,
+        });
       });
     } catch (error) {
-      await setDoc(gameDocRef, { 
-        diceValue: randomNum, 
-        lastRolledBy: currentUser.username, 
-        turn: gameState.turn, 
-        tokens: gameState.tokens,
-        consecutiveSixes: newSixesCount,
-        winner: null
-      });
+      console.error('Dice roll failed:', error);
+    } finally {
+      setTimeout(() => setIsRolling(false), 900);
     }
-    
-    setTimeout(() => {
-      setIsRolling(false);
-      if (randomNum === 6) {
-        playSfx('win');
-      }
-    }, 900);
   };
 
-  const handleTokenClick = async (playerColor: PlayerColor, tokenId: number) => {
-    if (!currentUser || !roomId || gameState.winner) return;
-    if (gameState.turn !== playerColor) return;
+  const handleTokenClick = async (
+    playerColor: PlayerColor,
+    tokenId: number,
+  ) => {
+    if (!currentUser || !roomId || !db) return;
 
-    const updatedTokens = JSON.parse(JSON.stringify(gameState.tokens)) as PlayerTokens;
-    if (!updatedTokens[playerColor]) {
-      updatedTokens[playerColor] = initialTokensState[playerColor];
-    }
-    const tokenList = updatedTokens[playerColor];
-    const token = tokenList.find((t: TokenState) => t.id === tokenId);
+    const gameDocRef = doc(
+      db, 'voice_rooms', roomId, 'games', 'ludo'
+    );
 
-    if (!token) return;
-
-    if (token.position === -1) {
-      if (gameState.diceValue === 1 || gameState.diceValue === 6) {
-        token.position = 0;
-        token.isHome = false;
-        playSfx('move');
-      } else {
-        return;
-      }
-    } else {
-      token.position += gameState.diceValue;
-      if (token.position > 51) {
-        token.position = 99; // Finished Goal
-        playSfx('win');
-      } else {
-        const newPos = token.position;
-        if (!STAR_TRACK_INDICES.includes(newPos)) {
-          const colors: PlayerColor[] = ['red', 'green', 'blue', 'yellow'];
-          colors.forEach(col => {
-            if (col !== playerColor && updatedTokens[col]) {
-              updatedTokens[col].forEach((oppToken: TokenState) => {
-                if (oppToken.position === newPos) {
-                  oppToken.position = -1; // Send opponent back to base
-                  oppToken.isHome = true;
-                  playSfx('win');
-                }
-              });
-            }
-          });
-        }
-        playSfx('move');
-      }
-    }
-
-    let gameWinner = gameState.winner;
-    const allFinished = tokenList.every((t: TokenState) => t.position === 99);
-    if (allFinished) {
-      gameWinner = playerColor.toUpperCase();
-      playSfx('win');
-    }
-
-    const nextTurn = gameState.diceValue === 6 ? gameState.turn : getNextTurn(gameState.turn);
-
-    const gameDocRef = doc(db, 'voice_rooms', roomId, 'games', 'ludo');
     try {
-      await updateDoc(gameDocRef, { 
-        tokens: updatedTokens,
-        turn: nextTurn,
-        winner: gameWinner
+      await runTransaction(db, async transaction => {
+        const snapshot = await transaction.get(gameDocRef);
+
+        if (!snapshot.exists()) {
+          throw new Error('Game not initialized.');
+        }
+
+        const state = snapshot.data() as GameState;
+
+        if (state.winner || !state.hasRolled) {
+          throw new Error('Roll the dice first.');
+        }
+
+        if (state.turn !== playerColor) {
+          throw new Error('Wrong player turn.');
+        }
+
+        if (state.players?.[playerColor] !== currentUser.username) {
+          throw new Error('You do not own this color.');
+        }
+
+        const tokens = JSON.parse(
+          JSON.stringify(state.tokens)
+        ) as PlayerTokens;
+
+        const token = tokens[playerColor].find(
+          t => t.id === tokenId
+        );
+
+        if (!token || !canMoveToken(token, state.diceValue)) {
+          throw new Error('Invalid token move.');
+        }
+
+        const oldPosition = token.position;
+
+        token.position =
+          oldPosition === -1
+            ? 0
+            : oldPosition + state.diceValue;
+
+        token.isHome = false;
+
+        let captured = false;
+
+        // Main Track-ൽ മാത്രം capture ചെയ്യാം.
+        if (
+          oldPosition >= 0 &&
+          oldPosition <= 51 &&
+          token.position <= 51
+        ) {
+          const globalPosition = getGlobalPosition(
+            playerColor, token.position
+          );
+
+          if (!SAFE_GLOBAL_POSITIONS.includes(globalPosition)) {
+            for (const opponent of COLORS) {
+              if (opponent === playerColor) continue;
+
+              for (const enemy of tokens[opponent]) {
+                if (
+                  enemy.position >= 0 &&
+                  enemy.position <= 51 &&
+                  getGlobalPosition(
+                    opponent, enemy.position
+                  ) === globalPosition
+                ) {
+                  enemy.position = -1;
+                  enemy.isHome = true;
+                  captured = true;
+                }
+              }
+            }
+          }
+        }
+
+        const winner = tokens[playerColor].every(
+          t => t.position === 57
+        )
+          ? playerColor.toUpperCase()
+          : null;
+
+        const bonusTurn =
+          state.diceValue === 6 || captured ||
+          token.position === 57;
+
+        const nextTurn = bonusTurn
+          ? state.turn
+          : getNextTurn(state.turn);
+
+        const nextCanRoll = bonusTurn && !winner;
+
+        transaction.update(gameDocRef, {
+          tokens,
+          winner: winner ?? state.winner ?? null,
+          turn: nextTurn,
+          hasRolled: false,
+          consecutiveSixes:
+            nextCanRoll ? state.consecutiveSixes : 0,
+          turnTimer: 15,
+          turnStartedAt: Date.now(),
+          revision: (state.revision ?? 0) + 1,
+        });
       });
-    } catch (e) {
-      console.log("Token update error:", e);
+
+      playSfx('move');
+    } catch (error) {
+      console.error('Token move failed:', error);
     }
   };
 
@@ -528,11 +784,16 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
   return (
     <div className={`flex flex-col items-center justify-center p-3.5 bg-gradient-to-br ${activeTheme.bgWrap} rounded-3xl w-full border border-white/20 relative overflow-hidden transition-colors duration-700 shadow-2xl`}>
       
-      {/* Top Header */}
+      {/* Top Header & Timer */}
       <div className="w-full flex items-center justify-between pb-2.5 px-2 mb-1.5 border-b border-white/10">
-        <span className="text-[11px] text-amber-400 font-extrabold uppercase tracking-widest drop-shadow">
-          {gameState.winner ? `🏆 WINNER: ${gameState.winner}` : `TURN: ${gameState.turn.toUpperCase()}`}
-        </span>
+        <div className="flex flex-col">
+          <span className="text-[11px] text-amber-400 font-extrabold uppercase tracking-widest drop-shadow">
+            {gameState.winner ? `🏆 WINNER: ${gameState.winner}` : `TURN: ${gameState.turn.toUpperCase()}`}
+          </span>
+          <span className="text-[9px] text-sky-300 font-bold">
+            ⏱️ Time Left: {displayTimer}s
+          </span>
+        </div>
         <button
           onClick={() => setIsSoundOn(!isSoundOn)}
           className={`px-3.5 py-1 rounded-md text-[10px] font-extrabold tracking-wider transition-all border shadow-md ${
@@ -541,6 +802,28 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         >
           {isSoundOn ? '🔊 SOUND ON' : '🔇 SOUND OFF'}
         </button>
+      </div>
+
+      {/* Slot Joining Bar */}
+      <div className="w-full grid grid-cols-4 gap-1.5 mb-2 px-1">
+        {COLORS.map(col => {
+          const joinedUser = gameState.players[col];
+          return (
+            <button
+              key={col}
+              onClick={() => handleJoinSlot(col)}
+              className={`py-1.5 px-1 rounded text-[9px] font-black uppercase tracking-wider border transition-all truncate ${
+                joinedUser === currentUser?.username 
+                  ? 'bg-emerald-600 text-white border-emerald-300 shadow-[0_0_10px_#10b981]' 
+                  : joinedUser 
+                  ? 'bg-zinc-800 text-zinc-400 border-zinc-700' 
+                  : 'bg-black/60 text-white/80 border-white/30 hover:bg-black'
+              }`}
+            >
+              {joinedUser ? `👤 ${joinedUser}` : `+ Join ${col}`}
+            </button>
+          );
+        })}
       </div>
 
       {/* Theme Selector Bar */}
@@ -568,10 +851,10 @@ const LudoGame: React.FC<LudoGameProps> = ({ roomId, currentUser }) => {
         
         <button 
           onClick={rollDice}
-          disabled={isRolling || !!gameState.winner}
+          disabled={isRolling || !!gameState.winner || gameState.hasRolled}
           className="px-7 py-3 bg-gradient-to-r from-zinc-900 via-black to-zinc-900 border border-white/40 text-white text-xs font-black tracking-widest rounded-xl hover:bg-zinc-800 active:scale-95 transition-all disabled:opacity-50 uppercase shadow-[0_10px_25px_rgba(0,0,0,1)]"
         >
-          {isRolling ? 'ROLLING...' : 'ROLL DICE 🎲'}
+          {isRolling ? 'ROLLING...' : gameState.hasRolled ? 'MOVE TOKEN' : 'ROLL DICE 🎲'}
         </button>
       </div>
 
