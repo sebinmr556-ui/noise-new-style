@@ -125,13 +125,13 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
 
   // -------------------------------------------------------------
-  // LIVEKIT TOKEN & CONNECTION STATES (എല്ലാ യൂസർമാർക്കും ടോക്കൺ എടുക്കും)
+  // LIVEKIT TOKEN & CONNECTION STATES (ലൂപ്പ് ഒഴിവാക്കാൻ ഒരേ ഒരു തവണ മാത്രം ഫെച്ച് ചെയ്യും)
   // -------------------------------------------------------------
   const [liveKitToken, setLiveKitToken] = useState<string | null>(null);
   const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL;
 
   useEffect(() => {
-    if (isOpen && currentUser && roomId) {
+    if (isOpen && currentUser && roomId && !liveKitToken) {
       fetch('/api/get-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -150,7 +150,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
         })
         .catch((err) => console.error('Error fetching LiveKit token:', err));
     }
-  }, [isOpen, currentUser, roomId]);
+  }, [isOpen, roomId]);
 
   // UI sheets and modals
   const [showAudienceSheet, setShowAudienceSheet] = useState(false);
@@ -494,7 +494,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       {liveKitToken && liveKitUrl && (
         <LiveKitRoom
           video={false}
-          audio={false} // Controller വഴിയാണ് ഇനി മൈക്ക് കൺട്രോൾ ചെയ്യുന്നത് 
+          audio={false}
           token={liveKitToken}
           serverUrl={liveKitUrl}
           connect={true}
