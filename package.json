@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.ts",
-    "build": "npx tsc && vite build",
+    "build": "vite build",
     "start": "NODE_ENV=production node server.ts"
   },
   "dependencies": {
