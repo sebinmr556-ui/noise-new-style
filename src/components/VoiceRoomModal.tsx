@@ -65,9 +65,11 @@ import {
   serverTimestamp 
 } from 'firebase/firestore';
 import { YouTubeWatchTogether } from './YouTubeWatchTogether';
-import LudoGame from './games/LudoGame'; // എറർ ഒഴിവാക്കാൻ പാത്ത് ./games/LudoGame എന്നാക്കി മാറ്റി
-// അഗോറയുടെ ഫയൽ ഇംപോർട്ട് ചെയ്യുന്നു
-import { useAgoraAudio } from '../utils/useAgoraAudio';
+import LudoGame from './games/LudoGame';
+
+// LiveKit Components & Styles import
+import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
+import '@livekit/components-styles';
 
 interface VoiceRoomModalProps {
   room: VoiceRoom;
@@ -150,7 +152,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const canModerate = isSuperAdmin || isOwner || isCoAdmin;
   const canDeleteRoom = isSuperAdmin || isOwner;
 
-  // Real Mic seats configuration (Seats 1 to 10; Seat 1 is always Room Owner)
+  // Real Mic seats configuration
   const lockedSeats = currentRoom.seats?.filter(s => s.isLocked).map(s => s.seatNumber) || [];
 
   // Active user speaking status on seat
@@ -160,13 +162,36 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   const [hasRaisedHand, setHasRaisedHand] = useState(false);
   const [isSpeakingLocally, setIsSpeakingLocally] = useState(false);
 
-  // ഇവിടെയാണ് അഗോറ വോയ്‌സ് കണക്ട് ആവുന്നത്
-  useAgoraAudio(
-    roomId, 
-    isSpeaker, 
-    isMuted, 
-    currentUser?.uid || `guest_${Math.floor(Math.random() * 10000)}`
-  );
+  // -------------------------------------------------------------
+  // LIVEKIT TOKEN & CONNECTION STATES
+  // -------------------------------------------------------------
+  const [liveKitToken, setLiveKitToken] = useState<string | null>(null);
+  const liveKitUrl = import.meta.env.VITE_LIVEKIT_URL;
+
+  // യൂസർ സ്പീക്കർ ആകുമ്പോൾമാത്രം ബാക്ക്എൻഡിൽ നിന്ന് LiveKit ടോക്കൺ ഫെച്ച് ചെയ്യുക
+  useEffect(() => {
+    if (isSpeaker && currentUser) {
+      fetch('/api/get-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomName: roomId,
+          username: currentUser.username || currentUser.displayName || 'Guest',
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.token) {
+            setLiveKitToken(data.token);
+          } else {
+            console.error('Failed to get LiveKit token:', data.error);
+          }
+        })
+        .catch((err) => console.error('Error fetching LiveKit token:', err));
+    } else {
+      setLiveKitToken(null);
+    }
+  }, [isSpeaker, currentUser, roomId]);
 
   // UI sheets and modals
   const [showAudienceSheet, setShowAudienceSheet] = useState(false);
@@ -179,7 +204,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
   // YouTube Watch Together & Ludo state
   const [showYouTube, setShowYouTube] = useState<boolean>(Boolean(currentRoom.youtubeState?.videoId));
   const [isYouTubeMinimized, setIsYouTubeMinimized] = useState<boolean>(false);
-  const [showLudo, setShowLudo] = useState<boolean>(false); // ലുഡോ സ്റ്റേറ്റ് ചേർത്തു
+  const [showLudo, setShowLudo] = useState<boolean>(false);
 
   // Chat & Gifts
   const [chatInput, setChatInput] = useState('');
@@ -318,7 +343,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Auto-show YouTube Watch Together if a video starts playing
   useEffect(() => {
     if (currentRoom.youtubeState?.videoId && !showYouTube && !showLudo) {
       setShowYouTube(true);
@@ -327,7 +351,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Database room updater helper
   const updateRoomState = async (updates: Partial<VoiceRoom>) => {
     const nextRoom = { ...currentRoom, ...updates };
     setCurrentRoom(nextRoom);
@@ -342,7 +365,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   };
 
-  // Toggle Microphone Track
   const handleToggleMediaTrack = () => {
     const nextMuted = !isMuted;
     setIsMuted(nextMuted);
@@ -357,7 +379,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   };
 
-  // Request to speak / Raise Hand
   const toggleHandRaise = async () => {
     if (!currentUser) return onRequireLogin();
     if (isSpeaker) return;
@@ -366,12 +387,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     const existingReq = currentRoom.speakingRequests?.some((r) => r.uid === currentUser.uid);
 
     if (existingReq) {
-      // Cancel request
       const updated = (currentRoom.speakingRequests || []).filter((r) => r.uid !== currentUser.uid);
       setHasRaisedHand(false);
       updateRoomState({ speakingRequests: updated });
     } else {
-      // Add request
       const newReq: SpeakingRequest = {
         uid: currentUser.uid,
         username: currentUser.username,
@@ -384,12 +403,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   };
 
-  // Approve speaking request
   const handleApproveRequest = async (request: SpeakingRequest) => {
     if (!canModerate) return;
     playChimeSound();
 
-    // Find first available unlocked seat between 2 and 10
     const occupiedSeats = currentRoom.speakers.map((s) => s.seatNumber || 1);
     let targetSeat = 2;
     for (let i = 2; i <= 10; i++) {
@@ -427,7 +444,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     updateRoomState({ speakingRequests: remainingRequests });
   };
 
-  // Seat Click handler
   const handleSeatClick = (seatNum: number) => {
     if (!currentUser) return onRequireLogin();
 
@@ -439,23 +455,19 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       return;
     }
 
-    // Empty seat clicked
     if (canModerate) {
       setSelectedSeatAction({ seatNum, occupant: null });
     } else {
-      // Visitor clicked empty seat
       if (isLocked) {
         alert('This seat is locked by the room host. Raise hand to request permission.');
         return;
       }
       if (isSpeaker) {
-        // Move own seat
         const updatedSpeakers = currentRoom.speakers.map((s) =>
           s.uid === currentUser.uid ? { ...s, seatNumber: seatNum } : s
         );
         updateRoomState({ speakers: updatedSpeakers });
       } else {
-        // Take seat
         playChimeSound();
         const newSpeaker: RoomParticipant = {
           uid: currentUser.uid,
@@ -475,7 +487,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   };
 
-  // Lock / Unlock Seat
   const handleToggleLockSeat = (seatNum: number) => {
     if (!canModerate) return;
     const isCurrentlyLocked = lockedSeats.includes(seatNum);
@@ -496,7 +507,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     setSelectedSeatAction(null);
   };
 
-  // Remove speaker from seat
   const handleRemoveFromSeat = (targetUid: string) => {
     if (!canModerate) return;
     const targetSpeaker = currentRoom.speakers.find((s) => s.uid === targetUid);
@@ -516,7 +526,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     setSelectedSeatAction(null);
   };
 
-  // Appoint / Demote Co-Admin (Owner Only)
   const handleToggleCoAdmin = (targetUid: string) => {
     if (!isOwner && !isSuperAdmin) return;
     const currentCoAdmins = currentRoom.coAdmins || [];
@@ -529,7 +538,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     setSelectedSeatAction(null);
   };
 
-  // Send Reaction
   const handleSendReaction = (emoji: string) => {
     playPopSound();
     const newReaction: FloatingReaction = {
@@ -544,7 +552,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }, 2000);
   };
 
-  // Send Gift
   const handleSendGift = () => {
     if (userCoins < selectedGift.coins) {
       alert('Not enough coins! Please Top Up.');
@@ -557,7 +564,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     setShowGiftModal(false);
   };
 
-  // Post chat message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = chatInput.trim();
@@ -583,22 +589,31 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
     }
   };
 
-  const handleShareRoom = () => {
-    navigator.clipboard?.writeText(window.location.href);
-    playPopSound();
-  };
-
-  // YouTube state handler
   const handleUpdateYouTube = (newYtState: RoomYouTubeState) => {
     updateRoomState({ youtubeState: newYtState });
   };
 
-  // Total online member count (speakers + listeners)
   const totalOnlineCount = currentRoom.speakers.length + currentRoom.listeners.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black select-none">
       
+      {/* ------------------------------------------------------------- */}
+      {/* LIVEKIT AUDIO RENDERER WRAPPER (യുസർ സ്പീക്കർ ആകുമ്പോൾമാത്രം ആക്ടീവ് ആകും) */}
+      {/* ------------------------------------------------------------- */}
+      {isSpeaker && liveKitToken && liveKitUrl && (
+        <LiveKitRoom
+          video={false}
+          audio={true}
+          token={liveKitToken}
+          serverUrl={liveKitUrl}
+          connect={true}
+          style={{ display: 'none' }}
+        >
+          <RoomAudioRenderer />
+        </LiveKitRoom>
+      )}
+
       {/* Floating Reactions Layer */}
       <div className="absolute inset-0 pointer-events-none z-50 overflow-hidden">
         {floatingReactions.map((r) => (
@@ -615,9 +630,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
       {/* Main Social Room Frame */}
       <div className="w-full h-full max-w-[430px] relative flex flex-col bg-zinc-950 sm:rounded-[40px] sm:h-[95vh] sm:border border-amber-500/40 shadow-[0_0_100px_rgba(245,158,11,0.25)] overflow-hidden">
         
-        {/* ========================================================= */}
-        {/* ROOM THEME BACKGROUND                                     */}
-        {/* ========================================================= */}
+        {/* ROOM THEME BACKGROUND */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
           <div className="absolute -top-16 inset-x-0 h-[460px] bg-[conic-gradient(at_top,_var(--tw-gradient-stops))] from-amber-500/35 via-yellow-400/45 to-amber-500/35 blur-2xl opacity-90 z-10" />
           <div className="absolute inset-0 z-0 flex items-center justify-center">
@@ -631,11 +644,8 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           <div className="absolute bottom-28 inset-x-0 h-96 bg-gradient-to-t from-black via-black/90 to-transparent z-10" />
         </div>
 
-        {/* ========================================================= */}
-        {/* 1. TOP HEADER BAR                                         */}
-        {/* ========================================================= */}
+        {/* 1. TOP HEADER BAR */}
         <div className="pt-3 px-3.5 pb-2 flex items-center justify-between z-30">
-          {/* Room Profile Badge */}
           <div className="flex items-center gap-2 bg-black/70 backdrop-blur-md border border-amber-400/40 rounded-full py-1 pl-1 pr-3 shadow-lg">
             <div className="relative w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-yellow-300 to-amber-600">
               <img 
@@ -655,9 +665,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-1.5">
-            {/* Ludo Game Button */}
             <button 
               onClick={() => {
                 setShowLudo(!showLudo);
@@ -671,16 +679,15 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               title="Play Ludo"
               type="button"
             >
-              <span className="">🎲 Ludo</span>
+              <span>🎲 Ludo</span>
             </button>
 
-            {/* YouTube Watch Together Button */}
             <button 
               onClick={() => {
                 setShowYouTube(!showYouTube);
                 if (!showYouTube) {
                   setIsYouTubeMinimized(false);
-                  setShowLudo(false); // യൂട്യൂബ് ഓൺ ആക്കുമ്പോൾ ലുഡോ ഹൈഡ് ചെയ്യാൻ
+                  setShowLudo(false);
                 }
               }}
               className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all shadow-md active:scale-95 cursor-pointer ${
@@ -695,7 +702,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               <span className="hidden xs:inline">Watch</span>
             </button>
 
-            {/* Speaking Requests Queue Button (For Moderators) */}
             {canModerate && (currentRoom.speakingRequests?.length || 0) > 0 && (
               <button
                 onClick={() => setShowRequestsSheet(true)}
@@ -710,7 +716,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               </button>
             )}
 
-            {/* Online Member Count */}
             <button 
               onClick={() => setShowAudienceSheet(!showAudienceSheet)}
               className="flex items-center gap-1 bg-black/60 px-2.5 py-1 rounded-full border border-white/15 text-[11px] font-bold text-amber-300 hover:bg-black/80 transition-colors"
@@ -720,7 +725,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               <span>{totalOnlineCount}</span>
             </button>
 
-            {/* Theme Store */}
             <button 
               onClick={() => setShowThemeModal(true)}
               className="w-7 h-7 bg-black/60 border border-amber-400/40 rounded-full text-amber-300 flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-transform"
@@ -730,7 +734,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               <Palette className="w-3.5 h-3.5" />
             </button>
 
-            {/* Minimize Room */}
             <button
               onClick={onMinimize}
               className="w-7 h-7 bg-black/60 border border-white/15 rounded-full text-white flex items-center justify-center hover:bg-zinc-800 transition-colors"
@@ -740,7 +743,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
 
-            {/* End Room (Owner / Super Admin) or Leave */}
             {canDeleteRoom ? (
               <button
                 onClick={() => setShowDeleteRoomModal(true)}
@@ -763,9 +765,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* 2. YOUTUBE WATCH TOGETHER DOCKED PLAYER                   */}
-        {/* ========================================================= */}
+        {/* 2. YOUTUBE WATCH TOGETHER DOCKED PLAYER */}
         {showYouTube && (
           <div className="z-30 relative px-2.5 pb-1">
             <YouTubeWatchTogether
@@ -781,9 +781,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* LUDO GAME BOARD                                           */}
-        {/* ========================================================= */}
+        {/* LUDO GAME BOARD */}
         {showLudo && (
           <div className="z-30 relative px-2.5 pb-2">
             <div className="bg-black/80 border border-blue-500/40 rounded-xl p-2 shadow-2xl">
@@ -798,11 +796,8 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 3. 10 REAL MICROPHONE SEATS GRID (FALLA STYLE)            */}
-        {/* ========================================================= */}
+        {/* 3. 10 REAL MICROPHONE SEATS GRID */}
         <div className="relative z-20 flex-1 px-3 py-2 flex flex-col justify-center overflow-y-auto">
-          {/* Top Row: Seat 1 (Owner Crown Seat) & Seat 2 */}
           <div className="flex items-center justify-center gap-6 mb-3">
             {/* SEAT 1: ROOM OWNER */}
             {(() => {
@@ -825,12 +820,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                       />
                     </div>
 
-                    {/* Gold Crown Badge */}
                     <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-lg border border-yellow-200 whitespace-nowrap">
                       👑 1 Host
                     </div>
 
-                    {/* Mic Indicator */}
                     <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center justify-center bg-black/90 px-1.5 py-0.5 rounded-full border border-amber-400/60 shadow-md">
                       {hostSpeaker?.isMuted ? (
                         <MicOff className="w-2.5 h-2.5 text-rose-400" />
@@ -850,7 +843,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               );
             })()}
 
-            {/* SEAT 2: CO-HOST / SECOND SEAT */}
+            {/* SEAT 2 */}
             {(() => {
               const seatNum = 2;
               const occupant = currentRoom.speakers.find((s) => s.seatNumber === seatNum && s.uid !== currentRoom.hostUid);
@@ -880,7 +873,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                       </div>
                     )}
 
-                    {/* Badge */}
                     <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-[9px] font-black uppercase px-2 py-0.5 rounded-full shadow-lg border border-purple-300 whitespace-nowrap">
                       ⭐ Seat 2
                     </div>
@@ -903,10 +895,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             })()}
           </div>
 
-          {/* Bottom Grid: Seats 3 to 10 (8 Translucent Glassmorphic Seats) */}
+          {/* Seats 3 to 10 */}
           <div className="grid grid-cols-4 gap-y-3.5 gap-x-2 max-w-sm mx-auto w-full">
             {Array.from({ length: 8 }, (_, i) => {
-              const seatNum = i + 3; // Seats 3 to 10
+              const seatNum = i + 3;
               const occupant = currentRoom.speakers.find((s) => s.seatNumber === seatNum && s.uid !== currentRoom.hostUid);
               const isLocked = lockedSeats.includes(seatNum);
 
@@ -935,12 +927,10 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                       </div>
                     )}
                     
-                    {/* Glowing Seat Tag */}
                     <span className="absolute -bottom-1.5 inset-x-0 mx-auto w-fit text-[9px] font-black text-amber-200 bg-black/90 px-1.5 py-0.2 rounded-full border border-amber-400/50 shadow-md">
                       {seatNum}
                     </span>
 
-                    {/* Microphone status icon */}
                     {occupant && (
                       <span className="absolute top-0 right-0 w-4 h-4 rounded-full bg-black/90 border border-white/20 flex items-center justify-center">
                         {occupant.isMuted ? (
@@ -961,12 +951,9 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* 4. REAL ANNOUNCEMENT & FLOATING CHAT                      */}
-        {/* ========================================================= */}
+        {/* 4. ANNOUNCEMENT & CHAT */}
         <div className="relative z-20 px-3.5 py-1 h-36 flex flex-col justify-end pointer-events-none">
           <div className="overflow-y-auto space-y-1.5 max-h-36 pointer-events-auto">
-            {/* Real Announcement Banner */}
             <div className="bg-amber-950/70 border border-amber-500/40 backdrop-blur-md rounded-2xl p-2 text-[11px] text-amber-200 shadow-lg max-w-[92%]">
               <span className="font-black text-amber-400 block uppercase tracking-wider text-[9px] mb-0.5">
                 📢 Announcement :
@@ -974,7 +961,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               <span>{currentRoom.announcement || `Welcome to ${currentRoom.title}! Respect each other and enjoy voice & videos.`}</span>
             </div>
 
-            {/* Chat Bubbles */}
             {messages.map((m) => (
               <div 
                 key={m.id}
@@ -990,11 +976,8 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         </div>
 
-        {/* ========================================================= */}
-        {/* 5. BOTTOM CONTROL BAR                                     */}
-        {/* ========================================================= */}
+        {/* 5. BOTTOM CONTROL BAR */}
         <div className="relative z-20 px-3 py-3 bg-gradient-to-t from-black via-zinc-950 to-transparent flex items-center gap-2">
-          {/* Reaction Emoji */}
           <button 
             onClick={() => handleSendReaction('❤️')}
             className="w-10 h-10 rounded-full bg-zinc-900/90 border border-white/10 flex items-center justify-center text-rose-500 hover:scale-105 active:scale-95 transition-transform"
@@ -1003,7 +986,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             ❤️
           </button>
 
-          {/* Message input */}
           <form onSubmit={handleSendMessage} className="flex-1 relative flex items-center">
             <input 
               type="text"
@@ -1017,7 +999,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </button>
           </form>
 
-          {/* Mic Toggle or Raise Hand */}
           {isSpeaker ? (
             <button 
               onClick={handleToggleMediaTrack}
@@ -1046,7 +1027,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
             </button>
           )}
 
-          {/* 3D Gifting Button */}
           <button 
             onClick={() => setShowGiftModal(true)}
             className="relative w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-400 via-rose-500 to-purple-600 p-[2px] shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center justify-center"
@@ -1059,9 +1039,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </button>
         </div>
 
-        {/* ========================================================= */}
-        {/* 6. FLYING GIFT ANIMATION OVERLAY                          */}
-        {/* ========================================================= */}
+        {/* FLYING GIFT ANIMATION OVERLAY */}
         {flyingGift && (
           <div className="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center animate-bounce">
             <div className="text-8xl drop-shadow-[0_10px_30px_rgba(255,215,0,0.8)] filter">
@@ -1073,9 +1051,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 7. SEAT MODERATION DIALOG MODAL                           */}
-        {/* ========================================================= */}
+        {/* SEAT MODERATION DIALOG MODAL */}
         {selectedSeatAction && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in">
             <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 max-w-xs w-full shadow-2xl space-y-3">
@@ -1164,9 +1140,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 8. SPEAKING REQUESTS SHEET (MODERATOR ONLY)               */}
-        {/* ========================================================= */}
+        {/* SPEAKING REQUESTS SHEET */}
         {showRequestsSheet && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-xs animate-in fade-in">
             <div className="w-full max-w-[430px] mx-auto bg-zinc-900 border-t-2 border-amber-500/50 rounded-t-3xl p-4 shadow-2xl space-y-3 max-h-[60vh] flex flex-col">
@@ -1216,9 +1190,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 9. REAL AUDIENCE & MEMBER LIST SHEET                      */}
-        {/* ========================================================= */}
+        {/* AUDIENCE SHEET */}
         {showAudienceSheet && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-xs animate-in fade-in">
             <div className="w-full max-w-[430px] mx-auto bg-zinc-900 border-t-2 border-amber-500/50 rounded-t-3xl p-4 shadow-2xl space-y-3 max-h-[70vh] flex flex-col">
@@ -1233,7 +1205,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
               </div>
 
               <div className="overflow-y-auto space-y-2 flex-1">
-                {/* Speakers Section */}
                 <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider pt-1">On Stage Speakers ({currentRoom.speakers.length})</p>
                 {currentRoom.speakers.map((s) => (
                   <div key={s.uid} className="flex items-center justify-between p-2 bg-zinc-950 rounded-xl border border-zinc-800">
@@ -1263,7 +1234,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                   </div>
                 ))}
 
-                {/* Audience Section */}
                 <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider pt-2">Audience ({currentRoom.listeners.length})</p>
                 {currentRoom.listeners.length === 0 ? (
                   <p className="text-xs text-zinc-500 py-2 italic text-center">No other audience members right now.</p>
@@ -1286,7 +1256,6 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
                       {canModerate && (
                         <button
                           onClick={() => {
-                            // Invite directly to mic
                             const emptySeats = [2,3,4,5,6,7,8,9,10].filter((n) => !currentRoom.speakers.some((s) => s.seatNumber === n) && !lockedSeats.includes(n));
                             if (emptySeats.length > 0) {
                               const newSpeaker: RoomParticipant = {
@@ -1315,9 +1284,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 10. GIFT DRAWER MODAL                                     */}
-        {/* ========================================================= */}
+        {/* GIFT DRAWER MODAL */}
         {showGiftModal && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
             <div 
@@ -1397,9 +1364,7 @@ export const VoiceRoomModal: React.FC<VoiceRoomModalProps> = ({
           </div>
         )}
 
-        {/* ========================================================= */}
-        {/* 11. THEME STORE MODAL                                     */}
-        {/* ========================================================= */}
+        {/* THEME STORE MODAL */}
         {showThemeModal && (
           <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/80 backdrop-blur-md animate-fadeIn">
             <div 
